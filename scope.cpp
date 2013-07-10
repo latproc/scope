@@ -23,7 +23,7 @@ void emit() {
 }
 
 void labels() {
-	std::cout << "Time";
+	std::cout << "\"Time\"";
 	std::map<std::string, int>::iterator iter = device_map.begin();
 	while (iter != device_map.end()) {
 		std::cout << "\t\"" << (*iter).first << "\"";
@@ -53,9 +53,12 @@ int main(int argc, char *argv[])
 		
 		if (t != last_t) {
 			emit();
+			if (t>last_t+1) { last_t = t-1; emit(); }
 			last_t = t;
 		}
-		device_map[dev] = value;
+		if (device_map.find(dev) != device_map.end()) {
+			device_map[dev] = value;
+		}
 		std::cin >> t >> dev >> state >> value;
 	}
 	last_t = t;

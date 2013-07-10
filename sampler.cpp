@@ -54,8 +54,9 @@ void save_devices() {
 		iter++;
 	}
 }
+
 void save_state_names() {
-	std::ofstream states_file("devices.txt");
+	std::ofstream states_file("states.txt");
 	std::map<std::string, int>::iterator iter = state_map.begin();
 	while (iter != state_map.end()) {
 		states_file << (*iter).first << "\t" << (*iter).second << "\n";
