@@ -27,6 +27,9 @@
 #include <string.h>
 #include "Logger.h"
 #include <inttypes.h>
+#include <stdlib.h>
+#include <fstream>
+#include <signal.h>
 
 namespace po = boost::program_options;
 
@@ -36,8 +39,36 @@ long get_diff_in_microsecs(struct timeval *now, struct timeval *then) {
     return t;
 }
 
+void interrupt_handler(int sig) {
+	exit(0);
+}
+
+std::map<std::string, int> state_map;
+std::map<std::string, int> device_map;
+
+void save_devices() {
+	std::ofstream device_file("devices.txt");
+	std::map<std::string, int>::iterator iter = device_map.begin();
+	while (iter != device_map.end()) {
+		device_file << (*iter).first << "\t" << (*iter).second << "\n";
+		iter++;
+	}
+}
+void save_state_names() {
+	std::ofstream states_file("devices.txt");
+	std::map<std::string, int>::iterator iter = state_map.begin();
+	while (iter != state_map.end()) {
+		states_file << (*iter).first << "\t" << (*iter).second << "\n";
+		iter++;
+	}
+}
+
 int main(int argc, const char * argv[])
 {
+	atexit(save_devices);
+	atexit(save_state_names);
+	signal(SIGINT, interrupt_handler);
+	signal(SIGTERM, interrupt_handler);
     try {
         
 #if 0
@@ -69,13 +100,13 @@ int main(int argc, const char * argv[])
 	        }
 	    }
 	    else {
-			std::map<std::string, int> state_map;
+	        // client
+			int next_device_num = 0;
+			int next_state_num = 0;
 			int port = 5556;
 			if (argc > 2 && strcmp(argv[1],"-p") == 0) {
 				port = strtol(argv[2], 0, 0);
 			}
-			std::cout << "Listening on port " << port << "\n";
-	        // client
 	        int res;
 			std::stringstream ss;
 			ss << "tcp://localhost:" << port;
@@ -100,31 +131,38 @@ int main(int argc, const char * argv[])
 	            //iss >> count;
 	            std::string point, op, state;
 	            iss >> point >> op;
-	            if (op == "STATE" || op == "VALUE") {					
+	            if (op == "STATE") {					
 	                iss >> state;
-					std::string key = point + "." + state;
 					int state_num = 0;
-					std::map<std::string, int>::iterator idx = state_map.find(key);
-					if (idx == state_map.end()) { // new state
-						std::map<std::string, int>::iterator idx = state_map.find(point);
-						if (idx == state_map.end()) { //new point
-							state_map[point] = 0;
-							state_map[key] = 0;
-						}
-						else {
-							(*idx).second++; // calc next state number
-							state_num = (*idx).second;
-						}
+					std::map<std::string, int>::iterator idx = state_map.find(state);
+					if (idx == state_map.end()) {// new state
+						state_num = next_state_num;
+						state_map[state] = next_state_num++;
 					}
 					else
 						state_num = (*idx).second;
-					state_map[key] = state_num;
+					idx = device_map.find(point);
+					if (idx == device_map.end()) //new machine
+						device_map[point] = next_device_num++;
 					
 					std::cout << get_diff_in_microsecs(&now, &start) << "\t" << point << "\t" << state << "\t" << state_num<< "\n" << std::flush;
 	            	//std::cout << point << " "<< op;
 	                //std::cout << " " << state << "\n";
 	            }
-	            else std::cout << data << "\n";
+				else if (op == "VALUE") {
+					std::map<std::string, int>::iterator idx = device_map.find(point);
+					if (idx == device_map.end()) //new machine
+						device_map[point] = next_device_num++;
+
+					std::string s_value;
+	                iss >> s_value;
+					long val;
+					char *remainder;
+					val = strtol(s_value.c_str(), &remainder, 0);
+					if (*remainder == 0)
+						std::cout << get_diff_in_microsecs(&now, &start) << "\t" << point << "\tvalue\t" << val << "\n" << std::flush;
+				}
+	            //else std::cout << data << "\n";
 				delete data;
 	        }
 	    }
