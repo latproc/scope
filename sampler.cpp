@@ -139,6 +139,7 @@ int main(int argc, const char * argv[])
 					if (idx == state_map.end()) {// new state
 						state_num = next_state_num;
 						state_map[state] = next_state_num++;
+						save_state_names();
 					}
 					else
 						state_num = (*idx).second;
