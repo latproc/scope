@@ -8,6 +8,7 @@ and converts it to output of the form:
 #include <iostream>
 #include <fstream>
 #include <map>
+#include <string.h>
 
 long last_t=0, t;
 
