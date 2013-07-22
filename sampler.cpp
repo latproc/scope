@@ -72,9 +72,11 @@ class SamplerOptions {
     int publish_to_port;
     string publish_to_interface;
     bool republish;
+    bool quiet;
   public:
     SamplerOptions() : subscribe_to_port(5556), subscribe_to_host("localhost"),
-        publish_to_port(5560), publish_to_interface("0.0.0.0"), republish(false) {}
+        publish_to_port(5560), publish_to_interface("0.0.0.0"), 
+		republish(false), quiet(false) {}
 	bool parseCommandLine(int argc, const char *argv[]);
 
 	bool publish() { return republish; }
@@ -82,6 +84,7 @@ class SamplerOptions {
     const std::string &subscriberHost() const { return subscribe_to_host; }
     int publisherPort() const { return publish_to_port; }
     const std::string &publisherInterface() const { return publish_to_interface; }
+	bool quietMode() { return quiet; }
 };
 
 bool SamplerOptions::parseCommandLine(int argc, const char *argv[]) {
@@ -94,6 +97,7 @@ bool SamplerOptions::parseCommandLine(int argc, const char *argv[]) {
         ("subscribe-port", po::value<int>(), "port to subscribe to [5556]")
         ("interface",po::value<string>(),  "local interface to publish to [0.0.0.0]")
         ("publish-port", po::value<int>(), "port to subscribe to [5560]")
+		("quiet", "quiet mode, no output on stdout")
         ;
         po::variables_map vm;        
         po::store(po::parse_command_line(argc, argv, desc), vm);
@@ -112,6 +116,8 @@ bool SamplerOptions::parseCommandLine(int argc, const char *argv[]) {
 			subscribe_to_port = vm["subscribe-port"].as<int>();
 		if (vm.count("publish-port")) 
 			publish_to_port = vm["publish-port"].as<int>();
+		if (vm.count("quiet"))
+			quiet = true;
 	}
     catch(exception& e) {
         cerr << "error: " << e.what() << "\n";
@@ -128,6 +134,9 @@ int main(int argc, const char * argv[])
 {
 	SamplerOptions options;
 	if (!options.parseCommandLine(argc, argv)) return 1;
+	
+	if (options.quietMode() && !options.publish())
+		cerr << "Warning: not writing to stdout or zmq\n";
 
 	atexit(save_devices);
 	atexit(save_state_names);
@@ -164,16 +173,18 @@ int main(int argc, const char * argv[])
         for (;;) {
             zmq::message_t update;
             subscriber.recv(&update);
+
 			struct timeval now;
 			gettimeofday(&now, 0);
+
 			long len = update.size();
             char *data = (char *)malloc(len+1);
             memcpy(data, update.data(), len);
             data[len] = 0;
             istringstream iss(data);
-            //iss >> count;
             string point, op, state;
             iss >> point >> op;
+
             if (op == "STATE") {					
                 iss >> state;
 				int state_num = 0;
@@ -189,9 +200,9 @@ int main(int argc, const char * argv[])
 				if (idx == device_map.end()) //new machine
 					device_map[point] = next_device_num++;
 				
-				cout << get_diff_in_microsecs(&now, &start) << "\t" << point << "\t" << state << "\t" << state_num<< "\n" << flush;
-            	//cout << point << " "<< op;
-                //cout << " " << state << "\n";
+				if (!options.quietMode())
+					cout << get_diff_in_microsecs(&now, &start) << "\t" 
+						<< point << "\t" << state << "\t" << state_num<< "\n" << flush;
             }
 			else if (op == "VALUE") {
 				map<string, int>::iterator idx = device_map.find(point);
@@ -204,9 +215,10 @@ int main(int argc, const char * argv[])
 				char *remainder;
 				val = strtol(s_value.c_str(), &remainder, 0);
 				if (*remainder == 0)
-					cout << get_diff_in_microsecs(&now, &start) << "\t" << point << "\tvalue\t" << val << "\n" << flush;
+					if (!options.quietMode()) 
+						cout << get_diff_in_microsecs(&now, &start) << "\t" 
+							<< point << "\tvalue\t" << val << "\n" << flush;
 			}
-            //else cout << data << "\n";
 			delete data;
         }
     }
