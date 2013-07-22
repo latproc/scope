@@ -60,9 +60,9 @@ int main(int argc, char *argv[])
 	/* prime the device list from a file. only devices listed there will 
 		be reported
 	*/
-	std::ifstream device_file("scope.txt");
+	std::ifstream device_file("scope.dat");
 	if (!device_file.good())
-		device_file.open("devices.txt");
+		device_file.open("devices.dat");
 	while (!device_file.eof()) {
 		std::string name;
 		int id;

@@ -49,7 +49,7 @@ map<string, int> state_map;
 map<string, int> device_map;
 
 void save_devices() {
-	ofstream device_file("devices.txt");
+	ofstream device_file("devices.dat");
 	map<string, int>::iterator iter = device_map.begin();
 	while (iter != device_map.end()) {
 		device_file << (*iter).first << "\t" << (*iter).second << "\n";
@@ -58,7 +58,7 @@ void save_devices() {
 }
 
 void save_state_names() {
-	ofstream states_file("states.txt");
+	ofstream states_file("states.dat");
 	map<string, int>::iterator iter = state_map.begin();
 	while (iter != state_map.end()) {
 		states_file << (*iter).first << "\t" << (*iter).second << "\n";
