@@ -84,10 +84,14 @@ class SamplerOptions {
     string publish_to_interface;
     bool republish;
     bool quiet;
+	bool raw;
+	bool ignore_values;
+	bool only_numeric_values;
   public:
     SamplerOptions() : subscribe_to_port(5556), subscribe_to_host("localhost"),
         publish_to_port(5560), publish_to_interface("*"), 
-		republish(false), quiet(false) {}
+		republish(false), quiet(false), raw(false), ignore_values(false), only_numeric_values(false)
+	 {}
 	bool parseCommandLine(int argc, const char *argv[]);
 
 	bool publish() { return republish; }
@@ -96,6 +100,9 @@ class SamplerOptions {
     int publisherPort() const { return publish_to_port; }
     const std::string &publisherInterface() const { return publish_to_interface; }
 	bool quietMode() { return quiet; }
+	bool rawMode() { return raw; }
+	bool ignoreValues() { return ignore_values; }
+	bool onlyNumericValues() { return only_numeric_values; }
 };
 
 bool SamplerOptions::parseCommandLine(int argc, const char *argv[]) {
@@ -110,6 +117,8 @@ bool SamplerOptions::parseCommandLine(int argc, const char *argv[]) {
         ("publish-port", po::value<int>(), "port to subscribe to [5560]")
 		("quiet", "quiet mode, no output on stdout")
 		("raw", "process all received messages, not just state and value changes")
+		("ignore-values", "ignore value changes, only process state changes")
+		("only-numeric-values", "ignore value changes for non-numeric values")
         ;
         po::variables_map vm;        
         po::store(po::parse_command_line(argc, argv, desc), vm);
@@ -128,8 +137,10 @@ bool SamplerOptions::parseCommandLine(int argc, const char *argv[]) {
 			subscribe_to_port = vm["subscribe-port"].as<int>();
 		if (vm.count("publish-port")) 
 			publish_to_port = vm["publish-port"].as<int>();
-		if (vm.count("quiet"))
-			quiet = true;
+		if (vm.count("quiet")) quiet = true;
+		if (vm.count("raw")) raw = true;
+		if (vm.count("ignore-values")) ignore_values = true;
+		if (vm.count("only-numeric-values")) only_numeric_values = true;
 	}
     catch(exception& e) {
         cerr << "error: " << e.what() << "\n";
@@ -298,50 +309,81 @@ int main(int argc, const char * argv[])
             char *data = (char *)malloc(len+1);
             memcpy(data, update.data(), len);
             data[len] = 0;
-            istringstream iss(data);
-            string point, op, state;
-            iss >> point >> op;
 			output.str("");	
 			output.clear();
-
-            if (op == "STATE") {					
-                iss >> state;
-				int state_num = 0;
-				map<string, int>::iterator idx = state_map.find(state);
-				if (idx == state_map.end()) {// new state
-					state_num = next_state_num;
-					state_map[state] = next_state_num++;
-					save_state_names();
-				}
-				else
-					state_num = (*idx).second;
-				idx = device_map.find(point);
-				if (idx == device_map.end()) //new machine
-					device_map[point] = next_device_num++;
+			if (options.rawMode()) {
+				output << data;
+			}
+            else {
+	            istringstream iss(data);
+	            string point, op, state;
+	            iss >> point >> op;
+				if (op == "STATE") {					
+	                iss >> state;
+					int state_num = 0;
+					map<string, int>::iterator idx = state_map.find(state);
+					if (idx == state_map.end()) {// new state
+						state_num = next_state_num;
+						state_map[state] = next_state_num++;
+						save_state_names();
+					}
+					else
+						state_num = (*idx).second;
+					idx = device_map.find(point);
+					if (idx == device_map.end()) //new machine
+						device_map[point] = next_device_num++;
 				
-				output << get_diff_in_microsecs(&now, &start) << "\t" 
-					<< point << "\t" << state << "\t" << state_num<< "\n";
-				if (!options.quietMode()) cout << output.str() << flush;
-            }
-			else if (op == "VALUE") {
-				map<string, int>::iterator idx = device_map.find(point);
-				if (idx == device_map.end()) //new machine
-					device_map[point] = next_device_num++;
-
-				string s_value;
-                iss >> s_value;
-				long val;
-				char *remainder;
-				val = strtol(s_value.c_str(), &remainder, 0);
-				if (*remainder == 0) {
 					output << get_diff_in_microsecs(&now, &start) << "\t" 
-							<< point << "\tvalue\t" << val << "\n";
-					if (!options.quietMode()) 
-						cout << output.str() << flush;
+						<< point << "\t" << state << "\t" << state_num;
+	            }
+				else if (op == "VALUE" && !options.ignoreValues()) {
+					map<string, int>::iterator idx = device_map.find(point);
+					if (idx == device_map.end()) //new machine
+						device_map[point] = next_device_num++;
+
+	
+					if (options.onlyNumericValues()) {
+						// convert the input to an integer value and output if 
+						// the conversion is successful
+						string s_value;
+		                iss >> s_value;
+						long val;
+						char *remainder;
+						val = strtol(s_value.c_str(), &remainder, 0);
+						if (*remainder == 0) {
+							output << get_diff_in_microsecs(&now, &start) << "\t" 
+									<< point << "\tvalue\t" << val;
+						}
+					}
+					else {
+						// copy the remainder of the stream as raw data
+						char buf[25];
+						char *rbuf;
+						int pos = iss.tellg();
+						iss.seekg(0,iss.end);
+						int endpos = iss.tellg();
+						int size = endpos - pos;
+						iss.seekg(pos,iss.beg);
+						if (size>=25)
+							rbuf = new char [size+1];
+						else
+							rbuf = buf;
+						std::streambuf *pbuf = iss.rdbuf();
+						pbuf->sgetn (rbuf,size);
+						rbuf[size] = 0;
+
+						output << get_diff_in_microsecs(&now, &start) << "\t" 
+								<< point << "\tvalue\t" << rbuf;
+						if (size>=25) delete rbuf;
+					}
 				}
 			}
-			if (options.publish()) {
-				mif->send(output.str().c_str());
+			if (!output.str().empty()) {
+				if (!options.quietMode()) 
+					cout << output.str() << "\n" << flush;
+				if (options.publish()) {
+					mif->send(output.str().c_str());
+				}
 			}
 			delete data;
         }
