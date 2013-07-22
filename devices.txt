@@ -1,0 +1,8 @@
+D_DoorDown	3
+D_DoorDown.TInput	6
+D_DoorDown.TInput.settle	7
+D_DoorDown.state	1
+D_DoorDown.state.settle	4
+I_DoorDown	0
+stable	5
+state.stable	2

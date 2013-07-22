@@ -1,0 +1,3 @@
+off	1
+on	0
+waiting	2
