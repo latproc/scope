@@ -327,6 +327,23 @@ int lookupState(std::string &state) {
 	return state_num;
 }
 
+std::string escapeNonprintables(const char *buf) {
+    const char *hex = "0123456789ABCDEF";
+	std::string res;
+	while (*buf) {
+		if (isprint(*buf)) res += *buf;
+		else if (*buf == '\015') res += "\\r";
+		else if (*buf == '\012') res += "\\n";
+		else if (*buf == '\010') res += "\\t";
+		else {
+			const char tmp[3] = { hex[ (*buf & 0xf0) >> 4], hex[ (*buf & 0x0f)], 0 };
+			res = res + "#{" + tmp + "}";
+		}
+		++buf;
+	}
+	return res;
+}
+
 int main(int argc, const char * argv[])
 {
 	SamplerOptions options;
@@ -404,9 +421,9 @@ int main(int argc, const char * argv[])
 						output << get_diff_in_microsecs(&now, &start) << "\t" 
 							<< property << "\tvalue\t";
 						if (val.kind == Value::t_string)
-						 	output << "\"" << val.asString() << "\"";
+						 	output << "\"" << escapeNonprintables(val.asString().c_str()) << "\"";
 						else
-							output << val.asString();
+							output << escapeNonprintables(val.asString().c_str());
 					}
 				}
 				else {
@@ -439,7 +456,7 @@ int main(int argc, const char * argv[])
 						else {
 							std::string val(outputRemaining(output, iss));
 							output << get_diff_in_microsecs(&now, &start) << "\t" 
-								<< property << "\tvalue\t" << val;
+								<< property << "\tvalue\t" << escapeNonprintables(val.c_str());
 						}
 					}
 				}

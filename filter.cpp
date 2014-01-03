@@ -1,6 +1,7 @@
 #include <iostream>
 #include <regular_expressions.h>
 #include <list>	
+#include <string.h>
 
 int main(int argc, char *argv[]) {
 	bool continuous = false; // ignore problems reading stdin, loop continuously
