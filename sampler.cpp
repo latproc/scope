@@ -30,6 +30,8 @@ device names are resent.
 */
 #include <iostream>
 #include <iterator>
+#include <string>
+#include <list>
 #include <stdio.h>
 #include <boost/program_options.hpp>
 #include <zmq.hpp>
@@ -40,7 +42,9 @@ device names are resent.
 #include <stdlib.h>
 #include <fstream>
 #include <signal.h>
+#include "cJSON.h"
 #include <MessagingInterface.h>
+#include <value.h>
 
 using namespace std;
 
@@ -153,7 +157,6 @@ bool SamplerOptions::parseCommandLine(int argc, const char *argv[]) {
 	return true;
 }
 
-
 struct CommandThread {
     void operator()();
     CommandThread();
@@ -170,22 +173,22 @@ public:
     const char *error() { return error_str.c_str(); }
     const char *result() { return result_str.c_str(); }
     
-	bool operator()(std::vector<std::string> &params) {
+	bool operator()(std::vector<Value> &params) {
 		done = run(params);
 		return done;
 	}
     
 protected:
-	virtual bool run(std::vector<std::string> &params) = 0;
+	virtual bool run(std::vector<Value> &params) = 0;
 	std::string error_str;
 	std::string result_str;
 };
 
 struct CommandRefresh : public Command {
-	bool run(std::vector<std::string> &params);
+	bool run(std::vector<Value> &params);
 };
 
-bool CommandRefresh::run(std::vector<std::string> &params) {
+bool CommandRefresh::run(std::vector<Value> &params) {
 	return false;
 }
 
@@ -196,8 +199,6 @@ void sendMessage(zmq::socket_t &socket, const char *message) {
     memcpy ((void *) reply.data (), msg, len);
     socket.send (reply);
 }
-
-
 
 void CommandThread::operator()() {
     std::cout << "------------------ Command Thread Started -----------------\n";
@@ -220,37 +221,49 @@ void CommandThread::operator()() {
             data[size] = 0;
             std::cout << "Command thread received " << data << std::endl;
             std::istringstream iss(data);
-            std::list<std::string> parts;
-            std::string ds;
-			Command *command = 0;
-            int count = 0;
-            while (iss >> ds) {
-                parts.push_back(ds);
-                ++count;
-            }
-            std::vector<std::string> params(0);
-            std::copy(parts.begin(), parts.end(), std::back_inserter(params));
+
+            std::list<Value> *parts = 0;
+
+			// read the command, attempt to read a structured form first, 
+			// and try a simple form if that fails
+			std::string cmd;
+			if (!MessagingInterface::getCommand(data, cmd, &parts)) {
+				parts = new std::list<Value>;
+	            int count = 0;
+				std::string s;
+	            while (iss >> s) {
+	                parts->push_back(Value(s.c_str()));
+	                ++count;
+	            }
+			}
+			
+            std::vector<Value> params(0);
+			params.push_back(cmd.c_str());
+            std::copy(parts->begin(), parts->end(), std::back_inserter(params));
+			delete parts;
             if (params.empty()) {
                 sendMessage(socket, "Empty message received\n");
                 goto cleanup;
             }
-            ds = params[0];
-			if (ds == "") {
-				command = new CommandRefresh();
-			}
-			else {
-				command = new CommandRefresh();
-			}
-            if ((*command)(params)) {
-                //std::cout << command->result() << "\n";
-                sendMessage(socket, command->result());
-            }
-            else {
-                NB_MSG << command->error() << "\n";
-                sendMessage(socket, command->error());
-            }
-            delete command;
-            
+			{
+				Command *command = 0;
+				std::string ds(params[0].asString());
+				if (ds == "") {
+					command = new CommandRefresh();
+				}
+				else {
+					command = new CommandRefresh();
+				}
+	            if ((*command)(params)) {
+	                //std::cout << command->result() << "\n";
+	                sendMessage(socket, command->result());
+	            }
+	            else {
+	                NB_MSG << command->error() << "\n";
+	                sendMessage(socket, command->error());
+	            }
+	            delete command;
+	        }
         cleanup:
             free(data);
         }
@@ -264,6 +277,54 @@ void CommandThread::operator()() {
         }
     }
     socket.close();
+}
+
+int outputNumeric(std::ostream &out, std::istream &in, long &val) {
+	// convert the input to an integer value and output the name and value if 
+	// the conversion is successful
+	string s_value;
+    in >> s_value;
+	char *remainder;
+	val = strtol(s_value.c_str(), &remainder, 0);
+	return (*remainder == 0);
+}
+
+std::string outputRemaining(std::ostream &out, std::istream &in) {
+	// copy the remainder of the stream as raw data
+	char buf[25];
+	char *rbuf;
+	int pos = in.tellg();
+	in.seekg(0,in.end);
+	int endpos = in.tellg();
+	int size = endpos - pos;
+	in.seekg(pos,in.beg);
+	if (size>=25)
+		rbuf = new char [size+1];
+	else
+		rbuf = buf;
+	std::streambuf *pbuf = in.rdbuf();
+	pbuf->sgetn (rbuf,size);
+	rbuf[size] = 0;
+
+	std::string res(rbuf);
+	if (size>=25) delete rbuf;
+	return res;
+}
+
+static int next_device_num = 0;
+static int next_state_num = 0;
+
+int lookupState(std::string &state) {
+	int state_num = 0;
+	map<string, int>::iterator idx = state_map.find(state);
+	if (idx == state_map.end()) {// new state
+		state_num = next_state_num;
+		state_map[state] = next_state_num++;
+		save_state_names();
+	}
+	else
+		state_num = (*idx).second;
+	return state_num;
 }
 
 int main(int argc, const char * argv[])
@@ -285,8 +346,6 @@ int main(int argc, const char * argv[])
         // this should be a separate thread
     try {
         // client
-		int next_device_num = 0;
-		int next_state_num = 0;
         int res;
 		stringstream ss;
 		ss << "tcp://" << options.subscriberHost() << ":" << options.subscriberPort();
@@ -315,66 +374,73 @@ int main(int argc, const char * argv[])
 				output << data;
 			}
             else {
-	            istringstream iss(data);
-	            string point, op, state;
-	            iss >> point >> op;
-				if (op == "STATE") {					
-	                iss >> state;
-					int state_num = 0;
-					map<string, int>::iterator idx = state_map.find(state);
-					if (idx == state_map.end()) {// new state
-						state_num = next_state_num;
-						state_map[state] = next_state_num++;
-						save_state_names();
+				std::list<Value> *message = 0;
+				string machine, property, op, state;
+				Value val(SymbolTable::Null);
+				if (MessagingInterface::getCommand(data, op, &message)) {
+					if (op == "STATE" && message->size() == 2) {
+						machine = message->front().asString();
+						message->pop_front();
+						state = message->front().asString();
+						int state_num = lookupState(state);
+						map<string, int>::iterator idx = device_map.find(machine);
+						if (idx == device_map.end()) //new machine
+							device_map[machine] = next_device_num++;
+						output << get_diff_in_microsecs(&now, &start) << "\t" 
+							<< machine << "\t" << state << "\t" << state_num;
 					}
-					else
-						state_num = (*idx).second;
-					idx = device_map.find(point);
-					if (idx == device_map.end()) //new machine
-						device_map[point] = next_device_num++;
+					else if (op == "PROPERTY" && message->size() == 3) {
+						std::string machine = message->front().asString();
+						message->pop_front();
+						std::string prop = message->front().asString();
+						message->pop_front();
+						property = machine + "." + prop;
+						val = message->front();
+
+						map<string, int>::iterator idx = device_map.find(property);
+						if (idx == device_map.end()) //new machine
+							device_map[property] = next_device_num++;
+						
+						output << get_diff_in_microsecs(&now, &start) << "\t" 
+							<< property << "\tvalue\t";
+						if (val.kind == Value::t_string)
+						 	output << "\"" << val.asString() << "\"";
+						else
+							output << val.asString();
+					}
+				}
+				else {
+		            istringstream iss(data);
+					std::string machine;
+		            iss >> machine >> op;
+					if (op == "STATE") {					
+		                iss >> state;
+						int state_num = lookupState(state);
+						map<string, int>::iterator idx = device_map.find(machine);
+						if (idx == device_map.end()) //new machine
+							device_map[machine] = next_device_num++;
 				
-					output << get_diff_in_microsecs(&now, &start) << "\t" 
-						<< point << "\t" << state << "\t" << state_num;
-	            }
-				else if (op == "VALUE" && !options.ignoreValues()) {
-					map<string, int>::iterator idx = device_map.find(point);
-					if (idx == device_map.end()) //new machine
-						device_map[point] = next_device_num++;
+						output << get_diff_in_microsecs(&now, &start) << "\t" 
+							<< machine << "\t" << state << "\t" << state_num;
+		            }
+					else if (op == "VALUE" && !options.ignoreValues()) {
+						property = machine;
+						map<string, int>::iterator idx = device_map.find(property);
+						if (idx == device_map.end()) //new machine
+							device_map[property] = next_device_num++;
 
 	
-					if (options.onlyNumericValues()) {
-						// convert the input to an integer value and output if 
-						// the conversion is successful
-						string s_value;
-		                iss >> s_value;
-						long val;
-						char *remainder;
-						val = strtol(s_value.c_str(), &remainder, 0);
-						if (*remainder == 0) {
-							output << get_diff_in_microsecs(&now, &start) << "\t" 
-									<< point << "\tvalue\t" << val;
+						if (options.onlyNumericValues()) {
+							long val;
+							if (outputNumeric(output, iss, val)) 
+								output << get_diff_in_microsecs(&now, &start) << "\t" 
+								<< property << "\tvalue\t" << val;
 						}
-					}
-					else {
-						// copy the remainder of the stream as raw data
-						char buf[25];
-						char *rbuf;
-						int pos = iss.tellg();
-						iss.seekg(0,iss.end);
-						int endpos = iss.tellg();
-						int size = endpos - pos;
-						iss.seekg(pos,iss.beg);
-						if (size>=25)
-							rbuf = new char [size+1];
-						else
-							rbuf = buf;
-						std::streambuf *pbuf = iss.rdbuf();
-						pbuf->sgetn (rbuf,size);
-						rbuf[size] = 0;
-
-						output << get_diff_in_microsecs(&now, &start) << "\t" 
-								<< point << "\tvalue\t" << rbuf;
-						if (size>=25) delete rbuf;
+						else {
+							std::string val(outputRemaining(output, iss));
+							output << get_diff_in_microsecs(&now, &start) << "\t" 
+								<< property << "\tvalue\t" << val;
+						}
 					}
 				}
 			}
