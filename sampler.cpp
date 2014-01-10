@@ -91,10 +91,12 @@ class SamplerOptions {
 	bool raw;
 	bool ignore_values;
 	bool only_numeric_values;
+	bool use_millis;
   public:
     SamplerOptions() : subscribe_to_port(5556), subscribe_to_host("localhost"),
         publish_to_port(5560), publish_to_interface("*"), 
-		republish(false), quiet(false), raw(false), ignore_values(false), only_numeric_values(false)
+		republish(false), quiet(false), raw(false), ignore_values(false), only_numeric_values(false),
+		use_millis(false)
 	 {}
 	bool parseCommandLine(int argc, const char *argv[]);
 
@@ -107,6 +109,7 @@ class SamplerOptions {
 	bool rawMode() { return raw; }
 	bool ignoreValues() { return ignore_values; }
 	bool onlyNumericValues() { return only_numeric_values; }
+	bool reportMillis() { return use_millis; }
 };
 
 bool SamplerOptions::parseCommandLine(int argc, const char *argv[]) {
@@ -123,6 +126,7 @@ bool SamplerOptions::parseCommandLine(int argc, const char *argv[]) {
 		("raw", "process all received messages, not just state and value changes")
 		("ignore-values", "ignore value changes, only process state changes")
 		("only-numeric-values", "ignore value changes for non-numeric values")
+		("millisec", "report time in milliseconds")
         ;
         po::variables_map vm;        
         po::store(po::parse_command_line(argc, argv, desc), vm);
@@ -145,6 +149,7 @@ bool SamplerOptions::parseCommandLine(int argc, const char *argv[]) {
 		if (vm.count("raw")) raw = true;
 		if (vm.count("ignore-values")) ignore_values = true;
 		if (vm.count("only-numeric-values")) only_numeric_values = true;
+		if (vm.count("millisec")) use_millis = true;
 	}
     catch(exception& e) {
         cerr << "error: " << e.what() << "\n";
@@ -381,6 +386,9 @@ int main(int argc, const char * argv[])
 			struct timeval now;
 			gettimeofday(&now, 0);
 
+			long scale = 1;
+			if (options.reportMillis()) scale = 1000;
+
 			long len = update.size();
             char *data = (char *)malloc(len+1);
             memcpy(data, update.data(), len);
@@ -395,7 +403,7 @@ int main(int argc, const char * argv[])
 				string machine, property, op, state;
 				Value val(SymbolTable::Null);
 				if (MessagingInterface::getCommand(data, op, &message)) {
-					if (op == "STATE" && message->size() == 2) {
+					if (op == "STATE"&& message->size() == 2) {
 						machine = message->front().asString();
 						message->pop_front();
 						state = message->front().asString();
@@ -403,8 +411,8 @@ int main(int argc, const char * argv[])
 						map<string, int>::iterator idx = device_map.find(machine);
 						if (idx == device_map.end()) //new machine
 							device_map[machine] = next_device_num++;
-						output << get_diff_in_microsecs(&now, &start) << "\t" 
-							<< machine << "\t" << state << "\t" << state_num;
+						output << get_diff_in_microsecs(&now, &start)/scale 
+							<< "\t" << machine << "\t" << state << "\t" << state_num;
 					}
 					else if (op == "PROPERTY" && message->size() == 3) {
 						std::string machine = message->front().asString();
@@ -418,8 +426,8 @@ int main(int argc, const char * argv[])
 						if (idx == device_map.end()) //new machine
 							device_map[property] = next_device_num++;
 						
-						output << get_diff_in_microsecs(&now, &start) << "\t" 
-							<< property << "\tvalue\t";
+						output << get_diff_in_microsecs(&now, &start)/ scale
+							<< "\t" << property << "\tvalue\t";
 						if (val.kind == Value::t_string)
 						 	output << "\"" << escapeNonprintables(val.asString().c_str()) << "\"";
 						else
@@ -437,8 +445,8 @@ int main(int argc, const char * argv[])
 						if (idx == device_map.end()) //new machine
 							device_map[machine] = next_device_num++;
 				
-						output << get_diff_in_microsecs(&now, &start) << "\t" 
-							<< machine << "\t" << state << "\t" << state_num;
+						output << get_diff_in_microsecs(&now, &start)/scale
+							<< "\t" << machine << "\t" << state << "\t" << state_num;
 		            }
 					else if (op == "VALUE" && !options.ignoreValues()) {
 						property = machine;
@@ -450,13 +458,13 @@ int main(int argc, const char * argv[])
 						if (options.onlyNumericValues()) {
 							long val;
 							if (outputNumeric(output, iss, val)) 
-								output << get_diff_in_microsecs(&now, &start) << "\t" 
-								<< property << "\tvalue\t" << val;
+								output << get_diff_in_microsecs(&now, &start) /scale
+								<< "\t" << property << "\tvalue\t" << val;
 						}
 						else {
 							std::string val(outputRemaining(output, iss));
-							output << get_diff_in_microsecs(&now, &start) << "\t" 
-								<< property << "\tvalue\t" << escapeNonprintables(val.c_str());
+							output << get_diff_in_microsecs(&now, &start) /scale
+								<< "\t" << property << "\tvalue\t" << escapeNonprintables(val.c_str());
 						}
 					}
 				}
