@@ -14,6 +14,7 @@ long last_t=0, t;
 
 bool emit_state_names = false;
 bool emit_state_ids = true;
+bool square_wave = false;
 
 struct StateInfo {
 	std::string name;
@@ -54,6 +55,8 @@ int main(int argc, char *argv[])
 		else if (strcmp(argv[i],"-s") == 0) emit_state_names = false;
 		else if (strcmp(argv[i],"-I") == 0) emit_state_ids = true;
 		else if (strcmp(argv[i],"-i") == 0) emit_state_ids = false;
+		else if (strcmp(argv[i],"-R") == 0) square_wave = true;
+		else if (strcmp(argv[i],"-r") == 0) square_wave = false;
 	}
 	if (!emit_state_names && !emit_state_ids) emit_state_ids = true;
 
@@ -81,7 +84,7 @@ int main(int argc, char *argv[])
 		
 		if (t != last_t) {
 			emit();
-			if (t>last_t+1) { last_t = t-1; emit(); }
+			if (square_wave && t>last_t+1) { last_t = t-1; emit(); }
 			last_t = t;
 		}
 		
