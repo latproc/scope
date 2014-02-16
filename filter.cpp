@@ -7,7 +7,7 @@ int main(int argc, char *argv[]) {
 	bool continuous = false; // ignore problems reading stdin, loop continuously
 	std::list<rexp_info*>patterns;
 	for (int i=1; i<argc; ++i) {
-		if (strcmp(argv[i],"-c"))
+		if (strcmp(argv[i],"-c") ==0 )
 			continuous = true;
 		int result = 1;
 		rexp_info *info = create_pattern(argv[i]);
