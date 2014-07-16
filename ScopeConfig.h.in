@@ -1,0 +1,2 @@
+#define Scope_VERSION_MAJOR @Scope_VERSION_MAJOR@
+#define Scope_VERSION_MINOR @Scope_VERSION_MINOR@
