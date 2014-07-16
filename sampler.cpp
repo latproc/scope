@@ -45,6 +45,7 @@ device names are resent.
 #include "cJSON.h"
 #include <MessagingInterface.h>
 #include <value.h>
+#include <MessageEncoding.h>
 
 using namespace std;
 
@@ -92,11 +93,12 @@ class SamplerOptions {
 	bool ignore_values;
 	bool only_numeric_values;
 	bool use_millis;
+	string channel_name;
   public:
     SamplerOptions() : subscribe_to_port(5556), subscribe_to_host("localhost"),
         publish_to_port(5560), publish_to_interface("*"), 
 		republish(false), quiet(false), raw(false), ignore_values(false), only_numeric_values(false),
-		use_millis(false)
+		use_millis(false), channel_name("SAMPLER")
 	 {}
 	bool parseCommandLine(int argc, const char *argv[]);
 
@@ -127,6 +129,7 @@ bool SamplerOptions::parseCommandLine(int argc, const char *argv[]) {
 		("ignore-values", "ignore value changes, only process state changes")
 		("only-numeric-values", "ignore value changes for non-numeric values")
 		("millisec", "report time in milliseconds")
+		("channel", po::value<string>(), "name of channel to use")
         ;
         po::variables_map vm;        
         po::store(po::parse_command_line(argc, argv, desc), vm);
@@ -150,6 +153,7 @@ bool SamplerOptions::parseCommandLine(int argc, const char *argv[]) {
 		if (vm.count("ignore-values")) ignore_values = true;
 		if (vm.count("only-numeric-values")) only_numeric_values = true;
 		if (vm.count("millisec")) use_millis = true;
+		if (vm.count("channel")) channel_name = vm["channel"].as<string>();
 	}
     catch(exception& e) {
         cerr << "error: " << e.what() << "\n";
@@ -207,8 +211,7 @@ void sendMessage(zmq::socket_t &socket, const char *message) {
 
 void CommandThread::operator()() {
     std::cout << "------------------ Command Thread Started -----------------\n";
-    zmq::context_t context (3);
-    zmq::socket_t socket (context, ZMQ_REP);
+    zmq::socket_t socket (*MessagingInterface::getContext(), ZMQ_REP);
     socket.bind ("tcp://*:5555");
     
     while (!done) {
@@ -232,7 +235,7 @@ void CommandThread::operator()() {
 			// read the command, attempt to read a structured form first, 
 			// and try a simple form if that fails
 			std::string cmd;
-			if (!MessagingInterface::getCommand(data, cmd, &parts)) {
+			if (!MessageEncoding::getCommand(data, cmd, &parts)) {
 				parts = new std::list<Value>;
 	            int count = 0;
 				std::string s;
@@ -351,6 +354,8 @@ std::string escapeNonprintables(const char *buf) {
 
 int main(int argc, const char * argv[])
 {
+	zmq::context_t context;
+	MessagingInterface::setContext(&context);
 	SamplerOptions options;
 	if (!options.parseCommandLine(argc, argv)) return 1;
 	
@@ -371,8 +376,7 @@ int main(int argc, const char * argv[])
         int res;
 		stringstream ss;
 		ss << "tcp://" << options.subscriberHost() << ":" << options.subscriberPort();
-        zmq::context_t context (1);
-        zmq::socket_t subscriber (context, ZMQ_SUB);
+        zmq::socket_t subscriber (*MessagingInterface::getContext(), ZMQ_SUB);
         res = zmq_setsockopt (subscriber, ZMQ_SUBSCRIBE, "", 0);
         assert (res == 0);
         subscriber.connect(ss.str().c_str());
@@ -402,7 +406,7 @@ int main(int argc, const char * argv[])
 				std::list<Value> *message = 0;
 				string machine, property, op, state;
 				Value val(SymbolTable::Null);
-				if (MessagingInterface::getCommand(data, op, &message)) {
+				if (MessageEncoding::getCommand(data, op, &message)) {
 					if (op == "STATE"&& message->size() == 2) {
 						machine = message->front().asString();
 						message->pop_front();
