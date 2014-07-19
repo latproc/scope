@@ -34,6 +34,7 @@ device names are resent.
 #include <list>
 #include <stdio.h>
 #include <boost/program_options.hpp>
+#include <boost/thread.hpp>
 #include <zmq.hpp>
 #include <sstream>
 #include <string.h>
@@ -46,6 +47,7 @@ device names are resent.
 #include <MessagingInterface.h>
 #include <value.h>
 #include <MessageEncoding.h>
+#include <ScopeConfig.h>
 
 using namespace std;
 
@@ -104,6 +106,7 @@ class SamplerOptions {
 
 	bool publish() { return republish; }
     int subscriberPort() const { return subscribe_to_port; }
+	void setSubscriberPort(int port) { subscribe_to_port = port; }
     const std::string &subscriberHost() const { return subscribe_to_host; }
     int publisherPort() const { return publish_to_port; }
     const std::string &publisherInterface() const { return publish_to_interface; }
@@ -193,12 +196,26 @@ protected:
 	std::string result_str;
 };
 
+CommandThread::CommandThread() : done(false) {}
+
 struct CommandRefresh : public Command {
 	bool run(std::vector<Value> &params);
 };
 
 bool CommandRefresh::run(std::vector<Value> &params) {
+	error_str = "refresh command not implemented";
 	return false;
+}
+
+struct CommandInfo : public Command {
+	bool run(std::vector<Value> &params);
+};
+
+bool CommandInfo::run(std::vector<Value> &params) {
+	char buf[100];
+	snprintf(buf, 100, "scope version %d.%d", Scope_VERSION_MAJOR, Scope_VERSION_MAJOR);
+	result_str = buf;
+	return true;
 }
 
 void sendMessage(zmq::socket_t &socket, const char *message) {
@@ -212,7 +229,7 @@ void sendMessage(zmq::socket_t &socket, const char *message) {
 void CommandThread::operator()() {
     std::cout << "------------------ Command Thread Started -----------------\n";
     zmq::socket_t socket (*MessagingInterface::getContext(), ZMQ_REP);
-    socket.bind ("tcp://*:5555");
+    socket.bind ("tcp://*:5655");
     
     while (!done) {
         try {
@@ -247,7 +264,8 @@ void CommandThread::operator()() {
 			
             std::vector<Value> params(0);
 			params.push_back(cmd.c_str());
-            std::copy(parts->begin(), parts->end(), std::back_inserter(params));
+			if (parts)
+				std::copy(parts->begin(), parts->end(), std::back_inserter(params));
 			delete parts;
             if (params.empty()) {
                 sendMessage(socket, "Empty message received\n");
@@ -256,8 +274,8 @@ void CommandThread::operator()() {
 			{
 				Command *command = 0;
 				std::string ds(params[0].asString());
-				if (ds == "") {
-					command = new CommandRefresh();
+				if (ds == "info") {
+					command = new CommandInfo();
 				}
 				else {
 					command = new CommandRefresh();
@@ -363,29 +381,66 @@ int main(int argc, const char * argv[])
 		cerr << "Warning: not writing to stdout or zmq\n";
 
 	MessagingInterface *mif = 0;
-    if (options.publish())
+	if (options.publish())
 	 	mif = MessagingInterface::create("*", options.publisherPort());
 	
 	atexit(save_devices);
 	atexit(save_state_names);
 	signal(SIGINT, interrupt_handler);
 	signal(SIGTERM, interrupt_handler);
-        // this should be a separate thread
-    try {
-        // client
-        int res;
+	
+	// this should be a separate thread
+	try {
+	
+		std::cout << "-------- Starting Command Interface ---------\n";	
+		CommandThread cmdline;
+		boost::thread cmd_interface(boost::ref(cmdline));
+	// client
+		int res;
+		zmq::socket_t setup (*MessagingInterface::getContext(), ZMQ_REQ);
 		stringstream ss;
+		ss << "tcp://" << options.subscriberHost() << ":5555"; // TBD no fixed port
+		setup.connect(ss.str().c_str());
+		char *channel_setup = MessageEncoding::encodeCommand("CHANNEL", "SAMPLER_CHANNEL");
+		size_t len = setup.send(channel_setup, strlen(channel_setup));
+		assert(len);
+		char buf[1000];
+		len = setup.recv(buf, 1000);
+		assert(len);
+		if (len && len<1000) {
+			buf[len] = 0;
+			cJSON *chan = cJSON_Parse(buf);
+			if (chan) {
+				cJSON *port_item = cJSON_GetObjectItem(chan, "port");
+				if (port_item) {
+					if (port_item->type == cJSON_Number) {
+						if (port_item->valueNumber.kind == cJSON_Number_int_t)
+							options.setSubscriberPort(port_item->valueint);
+						else
+							options.setSubscriberPort((int)port_item->valuedouble);
+					}
+				}
+			} 
+			else {
+				std::cout << " failed to parse: " << buf << "\n";
+			}
+		}
+		
+		// define the channel
+		ss.clear();
+		ss.str("");
 		ss << "tcp://" << options.subscriberHost() << ":" << options.subscriberPort();
-        zmq::socket_t subscriber (*MessagingInterface::getContext(), ZMQ_SUB);
-        res = zmq_setsockopt (subscriber, ZMQ_SUBSCRIBE, "", 0);
-        assert (res == 0);
-        subscriber.connect(ss.str().c_str());
+		
+		zmq::socket_t subscriber (*MessagingInterface::getContext(), ZMQ_SUB);
+		res = zmq_setsockopt (subscriber, ZMQ_SUBSCRIBE, "", 0);
+		assert (res == 0);
+		subscriber.connect(ss.str().c_str());
 		struct timeval start;
 		gettimeofday(&start, 0);
 		stringstream output;
-        for (;;) {
-            zmq::message_t update;
-            subscriber.recv(&update);
+		for (;;) {
+			zmq::message_t update;
+			subscriber.recv(&update);
 
 			struct timeval now;
 			gettimeofday(&now, 0);
@@ -394,15 +449,15 @@ int main(int argc, const char * argv[])
 			if (options.reportMillis()) scale = 1000;
 
 			long len = update.size();
-            char *data = (char *)malloc(len+1);
-            memcpy(data, update.data(), len);
-            data[len] = 0;
+			char *data = (char *)malloc(len+1);
+			memcpy(data, update.data(), len);
+			data[len] = 0;
 			output.str("");	
 			output.clear();
 			if (options.rawMode()) {
 				output << data;
 			}
-            else {
+			else {
 				std::list<Value> *message = 0;
 				string machine, property, op, state;
 				Value val(SymbolTable::Null);
@@ -482,6 +537,8 @@ int main(int argc, const char * argv[])
 			}
 			delete data;
         }
+		cmdline.stop();
+		cmd_interface.join();
     }
     catch(exception& e) {
         cerr << "error: " << e.what() << "\n";

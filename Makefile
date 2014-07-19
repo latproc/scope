@@ -1,6 +1,6 @@
 # setup and run cmake
 
-all:	sampler filter scope
+all:	build sampler filter scope
 
 build:
 	mkdir build
@@ -8,17 +8,16 @@ build:
 build/CMakeFiles:	build
 	(cd build; cmake ..; make )
 
-build/Scope:	build/CMakeFiles
-build/Sampler:	build/CMakeFiles
-build/Filter:	build/CMakeFiles
-
-scope:	build/Scope
+scope:	
+	(cd build; cmake ..; make )
 	cp build/Scope scope
 
-filter:	build/Filter
+filter:	
+	(cd build; cmake ..; make )
 	cp build/Filter filter
 
-sampler:	build/Sampler
+sampler:
+	(cd build; cmake ..; make )
 	cp build/Sampler sampler
 
 clean:

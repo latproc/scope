@@ -4,6 +4,8 @@ project (Scope)
 set (Scope_VERSION_MAJOR 0)
 set (Scope_VERSION_MINOR 8)
 
+set (CMAKE_CXX_FLAGS "-g -Wall")
+
 set (CLOCKWORK_DIR ${PROJECT_SOURCE_DIR}/../latproc/iod/)
 
 configure_file (
@@ -11,7 +13,7 @@ configure_file (
   "${PROJECT_BINARY_DIR}/ScopeConfig.h"
 )
 
-FIND_PACKAGE(Boost COMPONENTS system program_options REQUIRED )
+FIND_PACKAGE(Boost COMPONENTS system thread program_options REQUIRED )
 
 add_library (Clockwork 
     ${CLOCKWORK_DIR}/MessagingInterface.cpp 
@@ -32,11 +34,11 @@ include_directories("${PROJECT_SOURCE_DIR}/")
 include_directories("${PROJECT_BINARY_DIR}")
 include_directories("${CLOCKWORK_DIR}")
 
-add_executable (Sampler sampler.cpp)
+add_executable (Sampler src/sampler.cpp)
 target_link_libraries(Sampler Clockwork "zmq" ${Boost_LIBRARIES})
 
-add_executable (Filter filter.cpp)
+add_executable (Filter src/filter.cpp)
 target_link_libraries(Filter Clockwork "zmq" ${Boost_LIBRARIES})
 
-add_executable (Scope scope.cpp)
+add_executable (Scope src/scope.cpp)
 target_link_libraries(Filter Clockwork "zmq" ${Boost_LIBRARIES})
