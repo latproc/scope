@@ -65,6 +65,7 @@ void interrupt_handler(int sig) {
 
 map<string, int> state_map;
 map<string, int> device_map;
+std::string current_channel;
 
 void save_devices() {
 	ofstream device_file("devices.dat");
@@ -218,6 +219,60 @@ bool CommandInfo::run(std::vector<Value> &params) {
 	return true;
 }
 
+struct CommandMonitor : public Command {
+	bool run(std::vector<Value> &params);
+};
+
+bool CommandMonitor::run(std::vector<Value> &params) {
+	char buf[100];
+	if (params.size()<2) {
+		error_str = "usage: MONITOR machine_name | MONITOR PATTERN pattern";
+		return false;
+	}
+	snprintf(buf, 100, "CHANNEL %s ADD MONITOR %s", current_channel.c_str(), params[1].asString().c_str());
+	std::cerr <<buf << "\n";
+	zmq::socket_t sock(*MessagingInterface::getContext(), ZMQ_REQ);
+	sock.connect("inproc://remote_commands");
+	sock.send(buf, strlen(buf));
+	size_t len = sock.recv(buf, 100);
+	if (len) {
+		buf[len] = 0;
+		result_str = buf;
+		return true;
+	}
+	else {
+		error_str = "failed to issue command";
+		return false;
+	}
+}
+
+struct CommandStopMonitor : public Command {
+	bool run(std::vector<Value> &params);
+};
+
+bool CommandStopMonitor::run(std::vector<Value> &params) {
+	char buf[100];
+	if (params.size()<2) {
+		error_str = "usage: UNMONITOR machine_name | UNMONITOR PATTERN pattern";
+		return false;
+	}
+	snprintf(buf, 100, "CHANNEL %s REMOVE MONITOR %s", current_channel.c_str(), params[1].asString().c_str());
+	std::cerr <<buf << "\n";
+	zmq::socket_t sock(*MessagingInterface::getContext(), ZMQ_REQ);
+	sock.connect("inproc://remote_commands");
+	sock.send(buf, strlen(buf));
+	size_t len = sock.recv(buf, 100);
+	if (len) {
+		buf[len] = 0;
+		result_str = buf;
+		return true;
+	}
+	else {
+		error_str = "failed to issue command";
+		return false;
+	}
+}
+
 void sendMessage(zmq::socket_t &socket, const char *message) {
     const char *msg = (message) ? message : "";
     size_t len = strlen(msg);
@@ -277,6 +332,12 @@ void CommandThread::operator()() {
 				if (ds == "info") {
 					command = new CommandInfo();
 				}
+				else if (ds == "monitor") {
+					command = new CommandMonitor();
+				}
+				else if (ds == "unmonitor") {
+					command = new CommandStopMonitor();
+				}
 				else {
 					command = new CommandRefresh();
 				}
@@ -299,7 +360,7 @@ void CommandThread::operator()() {
                 std::cerr << zmq_strerror(zmq_errno()) << "\n" << std::flush;
             else
                 std::cerr << " Exception: " << e.what() << "\n" << std::flush;
-			if (zmq_errno() != EINTR && zmq_errno() != EAGAIN) abort();
+			//if (zmq_errno() != EINTR && zmq_errno() != EAGAIN) abort();
         }
     }
     socket.close();
@@ -370,6 +431,8 @@ std::string escapeNonprintables(const char *buf) {
 	return res;
 }
 
+enum Status{e_waiting_cmd, e_waiting_response};
+
 int main(int argc, const char * argv[])
 {
 	zmq::context_t context;
@@ -390,57 +453,97 @@ int main(int argc, const char * argv[])
 	signal(SIGTERM, interrupt_handler);
 	
 	// this should be a separate thread
-	try {
-	
-		std::cout << "-------- Starting Command Interface ---------\n";	
-		CommandThread cmdline;
-		boost::thread cmd_interface(boost::ref(cmdline));
-	// client
-		int res;
-		zmq::socket_t setup (*MessagingInterface::getContext(), ZMQ_REQ);
-		stringstream ss;
-		ss << "tcp://" << options.subscriberHost() << ":5555"; // TBD no fixed port
-		setup.connect(ss.str().c_str());
-		char *channel_setup = MessageEncoding::encodeCommand("CHANNEL", "SAMPLER_CHANNEL");
-		size_t len = setup.send(channel_setup, strlen(channel_setup));
-		assert(len);
-		char buf[1000];
-		len = setup.recv(buf, 1000);
-		assert(len);
-		if (len && len<1000) {
-			buf[len] = 0;
-			cJSON *chan = cJSON_Parse(buf);
-			if (chan) {
-				cJSON *port_item = cJSON_GetObjectItem(chan, "port");
-				if (port_item) {
-					if (port_item->type == cJSON_Number) {
-						if (port_item->valueNumber.kind == cJSON_Number_int_t)
-							options.setSubscriberPort(port_item->valueint);
-						else
-							options.setSubscriberPort((int)port_item->valuedouble);
-					}
-				}
-			} 
-			else {
-				std::cout << " failed to parse: " << buf << "\n";
-			}
-		}
-		
-		// define the channel
-		ss.clear();
-		ss.str("");
-		ss << "tcp://" << options.subscriberHost() << ":" << options.subscriberPort();
-		
-		zmq::socket_t subscriber (*MessagingInterface::getContext(), ZMQ_SUB);
-		res = zmq_setsockopt (subscriber, ZMQ_SUBSCRIBE, "", 0);
-		assert (res == 0);
-		subscriber.connect(ss.str().c_str());
-		struct timeval start;
-		gettimeofday(&start, 0);
-		stringstream output;
-		for (;;) {
+    std::cout << "-------- Starting Command Interface ---------\n";
+    CommandThread cmdline;
+    boost::thread cmd_interface(boost::ref(cmdline));
+// client
+    int res;
+    zmq::socket_t setup (*MessagingInterface::getContext(), ZMQ_REQ);
+    stringstream ss;
+    ss << "tcp://" << options.subscriberHost() << ":5555"; // TBD no fixed port
+    setup.connect(ss.str().c_str());
+    char *channel_setup = MessageEncoding::encodeCommand("CHANNEL", "SAMPLER_CHANNEL");
+    size_t len = setup.send(channel_setup, strlen(channel_setup));
+    assert(len);
+    {
+        char buf[1000];
+        len = setup.recv(buf, 1000);
+        assert(len);
+        if (len && len<1000) {
+            buf[len] = 0;
+            cJSON *chan = cJSON_Parse(buf);
+            if (chan) {
+                cJSON *port_item = cJSON_GetObjectItem(chan, "port");
+                if (port_item) {
+                    if (port_item->type == cJSON_Number) {
+                        if (port_item->valueNumber.kind == cJSON_Number_int_t)
+                            options.setSubscriberPort(port_item->valueint);
+                        else
+                            options.setSubscriberPort((int)port_item->valuedouble);
+                    }
+                }
+                cJSON *chan_name = cJSON_GetObjectItem(chan, "name");
+                if (chan_name && chan_name->type == cJSON_String) {
+                    current_channel = chan_name->valuestring;
+                }
+            } 
+            else {
+                std::cout << " failed to parse: " << buf << "\n";
+            }
+            cJSON_Delete(chan);
+        }
+    }
+    
+    zmq::socket_t cmd(*MessagingInterface::getContext(), ZMQ_REP);
+    cmd.bind("inproc://remote_commands");
+    
+    // define the channel
+    ss.clear();
+    ss.str("");
+    ss << "tcp://" << options.subscriberHost() << ":" << options.subscriberPort();
+    
+    zmq::socket_t subscriber (*MessagingInterface::getContext(), ZMQ_SUB);
+    res = zmq_setsockopt (subscriber, ZMQ_SUBSCRIBE, "", 0);
+    assert (res == 0);
+    subscriber.connect(ss.str().c_str());
+    struct timeval start;
+    gettimeofday(&start, 0);
+    Status status = e_waiting_cmd;
+    stringstream output;
+    char buf[1000];
+    for (;;) {
+        try {
+            zmq::pollitem_t items[] = {
+                { subscriber, 0, ZMQ_POLLERR | ZMQ_POLLIN, 0 },
+                { cmd, 0, ZMQ_POLLERR | ZMQ_POLLIN, 0 },
+                { setup, 0, ZMQ_POLLERR | ZMQ_POLLIN, 0 }
+            };
+            zmq::poll( &items[0], 3, 500*1000);
+            
+            size_t msglen = 0;
+            if (status == e_waiting_cmd && items[1].revents & ZMQ_POLLIN) {
+                if ( (msglen = cmd.recv(buf, 1000, ZMQ_NOBLOCK)) != 0) {
+                    buf[msglen] = 0;
+                    std::cerr << "got cmd: " << buf << "\n";
+                    setup.send(buf,msglen);
+                    status = e_waiting_response;
+                }
+            }
+            if (status == e_waiting_response && items[2].revents & ZMQ_POLLIN) {
+                if ( (msglen = setup.recv(buf, 1000, ZMQ_NOBLOCK)) != 0) {
+                    if (msglen && msglen<1000) {
+                        cmd.send(buf, msglen);
+                    }
+                    else {
+                        cmd.send("error", 5);
+                    }
+                    status = e_waiting_cmd;
+                }
+            }
+            if ( !(items[0].revents & ZMQ_POLLIN) ) continue;
+			
 			zmq::message_t update;
-			subscriber.recv(&update);
+			subscriber.recv(&update, ZMQ_NOBLOCK);
 
 			struct timeval now;
 			gettimeofday(&now, 0);
@@ -537,16 +640,15 @@ int main(int argc, const char * argv[])
 			}
 			delete data;
         }
-		cmdline.stop();
-		cmd_interface.join();
+        catch(exception& e) {
+            cerr << "error: " << e.what() << "\n";
+        }
+        catch(...) {
+            cerr << "Exception of unknown type!\n";
+        }
     }
-    catch(exception& e) {
-        cerr << "error: " << e.what() << "\n";
-        return 1;
-    }
-    catch(...) {
-        cerr << "Exception of unknown type!\n";
-    }
+    cmdline.stop();
+    cmd_interface.join();
 
     return 0;
 }
