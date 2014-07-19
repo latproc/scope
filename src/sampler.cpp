@@ -224,17 +224,28 @@ struct CommandMonitor : public Command {
 };
 
 bool CommandMonitor::run(std::vector<Value> &params) {
-	char buf[100];
+	char buf[1000];
 	if (params.size()<2) {
 		error_str = "usage: MONITOR machine_name | MONITOR PATTERN pattern";
 		return false;
 	}
-	snprintf(buf, 100, "CHANNEL %s ADD MONITOR %s", current_channel.c_str(), params[1].asString().c_str());
+	if (params.size() == 3 && params[1] == "PATTERN") {
+		snprintf(buf, 1000, "CHANNEL %s ADD MONITOR PATTERN %s", 
+			current_channel.c_str(), params[2].asString().c_str());
+	}
+	else if (params.size() == 2) {
+		snprintf(buf, 1000, "CHANNEL %s ADD MONITOR %s", 
+			current_channel.c_str(), params[1].asString().c_str());		
+	}
+	else {
+		error_str = "usage: MONITOR machine_name | MONITOR PATTERN pattern";
+		return false;
+	}
 	std::cerr <<buf << "\n";
 	zmq::socket_t sock(*MessagingInterface::getContext(), ZMQ_REQ);
 	sock.connect("inproc://remote_commands");
 	sock.send(buf, strlen(buf));
-	size_t len = sock.recv(buf, 100);
+	size_t len = sock.recv(buf, 1000);
 	if (len) {
 		buf[len] = 0;
 		result_str = buf;
@@ -256,7 +267,18 @@ bool CommandStopMonitor::run(std::vector<Value> &params) {
 		error_str = "usage: UNMONITOR machine_name | UNMONITOR PATTERN pattern";
 		return false;
 	}
-	snprintf(buf, 100, "CHANNEL %s REMOVE MONITOR %s", current_channel.c_str(), params[1].asString().c_str());
+	if (params.size() == 3 && params[1] == "PATTERN") {
+		snprintf(buf, 1000, "CHANNEL %s REMOVE MONITOR PATTERN %s", 
+			current_channel.c_str(), params[2].asString().c_str());
+	}
+	else if (params.size() == 2) {
+		snprintf(buf, 100, "CHANNEL %s REMOVE MONITOR %s", 
+			current_channel.c_str(), params[1].asString().c_str());
+	}
+	else {
+		error_str = "usage: MONITOR machine_name | MONITOR PATTERN pattern";
+		return false;
+	}
 	std::cerr <<buf << "\n";
 	zmq::socket_t sock(*MessagingInterface::getContext(), ZMQ_REQ);
 	sock.connect("inproc://remote_commands");
