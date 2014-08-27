@@ -27,6 +27,7 @@ Devices are mapped to a unique integer that is displayed or republished
 instead of the device name. A second channel is used to transmit new machine names
 as they are discovered. A command channel can be used to request that all 
 device names are resent.
+
 */
 #include <iostream>
 #include <iterator>
@@ -172,69 +173,6 @@ bool SamplerOptions::parseCommandLine(int argc, const char *argv[]) {
     }
 	return true;
 }
-
-class MyMonitor : public zmq::monitor_t {
-public:
-    MyMonitor(zmq::socket_t &s, const char *snam) : sock(s), disconnected_(true), socket_name(snam) {
-    }
-    void operator()() {
-        monitor(sock, socket_name);
-    }
-    virtual void on_monitor_started() {
-        std::cerr << "monitor started\n";
-    }
-    virtual void on_event_connected(const zmq_event_t &event_, const char* addr_) {
-        std::cerr << "on_event_connected " << addr_ << "\n";
-        disconnected_ = false;
-    }
-    virtual void on_event_connect_delayed(const zmq_event_t &event_, const char* addr_) {
-        std::cerr << "on_event_connect_delayed " << addr_ << "\n"; }
-    virtual void on_event_connect_retried(const zmq_event_t &event_, const char* addr_) {
-        std::cerr << "on_event_connect_retried " << addr_ << "\n";}
-    virtual void on_event_listening(const zmq_event_t &event_, const char* addr_) {
-        std::cerr << "on_event_listening " << addr_ << "\n"; }
-    virtual void on_event_bind_failed(const zmq_event_t &event_, const char* addr_) {
-        std::cerr << "on_event_bind_failed " << addr_ << "\n"; }
-    virtual void on_event_accepted(const zmq_event_t &event_, const char* addr_) {
-        std::cerr << "on_event_accepted " << event_.value << " " << addr_ << "\n";
-        disconnected_ = false;
-    }
-    virtual void on_event_accept_failed(const zmq_event_t &event_, const char* addr_) {
-        std::cerr << "on_event_accept_failed " << addr_ << "\n"; }
-    virtual void on_event_closed(const zmq_event_t &event_, const char* addr_) {
-        std::cerr << "on_event_closed " << addr_ << "\n";}
-    virtual void on_event_close_failed(const zmq_event_t &event_, const char* addr_) {
-        std::cerr << "on_event_close_failed " << addr_ << "\n";}
-    virtual void on_event_disconnected(const zmq_event_t &event_, const char* addr_) {
-        std::cerr << "on_event_disconnected "<< event_.value << " "  << addr_ << "\n";
-        disconnected_ = true;
-    }
-    virtual void on_event_unknown(const zmq_event_t &event_, const char* addr_) {
-        std::cerr << "on_event_unknown " << addr_ << "\n"; }
-    
-    bool disconnected() { return disconnected_; }
-    
-protected:
-    zmq::socket_t &sock;
-    bool disconnected_;
-    const char *socket_name;
-};
-
-class SingleConnectionMonitor : public MyMonitor {
-public:
-    SingleConnectionMonitor(zmq::socket_t &s, const char *snam)
-    : MyMonitor(s, snam) { }
-    virtual void on_event_disconnected(const zmq_event_t &event_, const char* addr_) {
-        MyMonitor::on_event_disconnected(event_, addr_);
-        sock.disconnect(sock_addr.c_str());
-    }
-    void setEndPoint(const char *endpt) { sock_addr = endpt; }
-private:
-    std::string sock_addr;
-    SingleConnectionMonitor(const SingleConnectionMonitor&);
-    SingleConnectionMonitor &operator=(const SingleConnectionMonitor&);
-};
-
 struct CommandThread {
     void operator()();
     CommandThread();
@@ -317,10 +255,12 @@ bool CommandMonitor::run(std::vector<Value> &params) {
 	zmq::socket_t sock(*MessagingInterface::getContext(), ZMQ_REQ);
 	sock.connect("inproc://remote_commands");
 	sock.send(buf, strlen(buf));
+    std::cout << "sent internal command: " << buf << "\n";
 	size_t len = sock.recv(buf, 1000);
 	if (len) {
 		buf[len] = 0;
 		result_str = buf;
+        std::cout << "got internal response: " << buf << "\n";
 		return true;
 	}
 	else {
@@ -523,81 +463,6 @@ std::string escapeNonprintables(const char *buf) {
 	return res;
 }
 
-enum Status{e_waiting_cmd, e_waiting_response, e_startup, e_disconnected, e_waiting_connect,
-    e_settingup_subscriber, e_waiting_subscriber, e_done };
-
-bool requestChannel(SamplerOptions &options, zmq::socket_t &setup, Status &status) {
-    size_t len = 0;
-    if (status == e_disconnected) {
-        char *channel_setup = MessageEncoding::encodeCommand("CHANNEL", "SAMPLER_CHANNEL");
-        len = setup.send(channel_setup, strlen(channel_setup));
-        assert(len);
-        status = e_waiting_connect;
-    }
-    if (status == e_waiting_connect){
-        char buf[1000];
-        try {
-        len = setup.recv(buf, 1000);
-        }
-        catch (zmq::error_t e) {
-            std::cerr << zmq_strerror(errno);
-            return false;
-        }
-        assert(len);
-        status = e_settingup_subscriber;
-        if (len && len<1000) {
-            buf[len] = 0;
-            cJSON *chan = cJSON_Parse(buf);
-            if (chan) {
-                cJSON *port_item = cJSON_GetObjectItem(chan, "port");
-                if (port_item) {
-                    if (port_item->type == cJSON_Number) {
-                        if (port_item->valueNumber.kind == cJSON_Number_int_t)
-                            options.setSubscriberPort(port_item->valueint);
-                        else
-                            options.setSubscriberPort((int)port_item->valuedouble);
-                    }
-                }
-                cJSON *chan_name = cJSON_GetObjectItem(chan, "name");
-                if (chan_name && chan_name->type == cJSON_String) {
-                    current_channel = chan_name->valuestring;
-                }
-            }
-            else {
-                status = e_disconnected;
-                std::cout << " failed to parse: " << buf << "\n";
-                current_channel = "";
-            }
-            cJSON_Delete(chan);
-        }
-    }
-    if (current_channel == "") return false;
-    return true;
-}
-
-bool setupSubscriptions(SamplerOptions &options, zmq::socket_t &setup, zmq::socket_t &subscriber,
-                        Status &status, SingleConnectionMonitor *setup_monitor, SingleConnectionMonitor *subs_monitor) {
-    stringstream ss;
-    if (status == e_startup) {
-        ss << "tcp://" << options.subscriberHost() << ":5555"; // TBD no fixed port
-        setup.connect(ss.str().c_str());
-        setup_monitor->setEndPoint(ss.str().c_str());
-        status = e_disconnected;
-    }
-    if (requestChannel(options, setup, status)) {
-        // define the channel
-        ss.clear(); ss.str("");
-        ss << "tcp://" << options.subscriberHost() << ":" << options.subscriberPort();
-        std::string channel_url = ss.str();
-        std::cerr << "connecting to " << channel_url << "\n";
-        options.setChannelURL(channel_url.c_str());
-        subs_monitor->setEndPoint(channel_url.c_str());
-        subscriber.connect(channel_url.c_str());
-        status = e_done;
-        return true;
-    }
-    return false;
-}
 
 int main(int argc, const char * argv[])
 {
@@ -622,88 +487,29 @@ int main(int argc, const char * argv[])
     std::cout << "-------- Starting Command Interface ---------\n";
     CommandThread cmdline;
     boost::thread cmd_interface(boost::ref(cmdline));
-
     
-    int res;
-    zmq::socket_t subscriber (*MessagingInterface::getContext(), ZMQ_SUB);
-    res = zmq_setsockopt (subscriber, ZMQ_SUBSCRIBE, "", 0);
-    assert (res == 0);
-    
-    SingleConnectionMonitor monit_subs(subscriber, "inproc://monitor.subs");
-    boost::thread subscriber_monitor(boost::ref(monit_subs));
-    
-    // client
-    zmq::socket_t setup (*MessagingInterface::getContext(), ZMQ_REQ);
-    SingleConnectionMonitor monit_setup(setup, "inproc://monitor.setup");
-    boost::thread setup_monitor(boost::ref(monit_setup));
-
     zmq::socket_t cmd(*MessagingInterface::getContext(), ZMQ_REP);
     cmd.bind("inproc://remote_commands");
-
-    Status run_status = e_waiting_cmd;
-    Status setup_status = e_startup;
-    //if (setupSubscriptions(options, setup, subscriber, status)) status = saved_status;
+    
+    SubscriptionManager subscription_manager("SAMPLER_CHANNEL");
     
     struct timeval start;
     gettimeofday(&start, 0);
     stringstream output;
-    char buf[1000];
     for (;;) {
         try {
             zmq::pollitem_t items[] = {
-                { cmd, 0, ZMQ_POLLERR | ZMQ_POLLIN, 0 },
-                { subscriber, 0, ZMQ_POLLERR | ZMQ_POLLIN, 0 },
-                { setup, 0, ZMQ_POLLERR | ZMQ_POLLIN, 0 }
+                { subscription_manager.setup, 0, ZMQ_POLLERR | ZMQ_POLLIN, 0 },
+                { subscription_manager.subscriber, 0, ZMQ_POLLERR | ZMQ_POLLIN, 0 },
+                { cmd, 0, ZMQ_POLLERR | ZMQ_POLLIN, 0 }
             };
-            int rc = 0;
-            if (monit_setup.disconnected() && monit_subs.disconnected()) {
-                // clockwork has disconnected
-                //if (setup_status == e_done) subscriber.disconnect(options.channelURL());
-                setup_status = e_startup;
-                setupSubscriptions(options, setup, subscriber, setup_status, &monit_setup, &monit_subs);
-                usleep(50000);
+			if (!subscription_manager.checkConnections(items, 3, cmd))
                 continue;
-            }
-            if (setup_status == e_disconnected || ( monit_setup.disconnected() && monit_subs.disconnected() ) ) {
-                // clockwork has disconnected
-                setupSubscriptions(options, setup, subscriber, setup_status, &monit_setup, &monit_subs);
-                usleep(50000);
+            if ( !(items[1].revents & ZMQ_POLLIN) || (items[1].revents & ZMQ_POLLERR) )
                 continue;
-            }
-            if (monit_subs.disconnected() || monit_setup.disconnected())
-                rc = zmq::poll( &items[0], 1, 500);
-            else
-                rc = zmq::poll(&items[0], 3, 500);
             
-            size_t msglen = 0;
-            if (run_status == e_waiting_cmd && items[0].revents & ZMQ_POLLIN) {
-                if ( (msglen = cmd.recv(buf, 1000, ZMQ_NOBLOCK)) != 0) {
-                    buf[msglen] = 0;
-                    std::cerr << "got cmd: " << buf << "\n";
-                    if (!monit_setup.disconnected()) setup.send(buf,msglen);
-                    run_status = e_waiting_response;
-                }
-            }
-            if (run_status == e_waiting_response && monit_setup.disconnected()) {
-                const char *msg = "disconnected, attempting reconnect";
-                cmd.send(msg, strlen(msg));
-                run_status = e_waiting_cmd;
-            }
-            else if (run_status == e_waiting_response && items[2].revents & ZMQ_POLLIN) {
-                if ( (msglen = setup.recv(buf, 1000, ZMQ_NOBLOCK)) != 0) {
-                    if (msglen && msglen<1000) {
-                        cmd.send(buf, msglen);
-                    }
-                    else {
-                        cmd.send("error", 5);
-                    }
-                    run_status = e_waiting_cmd;
-                }
-            }
-            if ( !(items[1].revents & ZMQ_POLLIN) ) continue;
-			
 			zmq::message_t update;
-			subscriber.recv(&update, ZMQ_NOBLOCK);
+			subscription_manager.subscriber.recv(&update, ZMQ_NOBLOCK);
 
 			struct timeval now;
 			gettimeofday(&now, 0);
