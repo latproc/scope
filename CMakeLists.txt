@@ -34,6 +34,8 @@ include_directories("${PROJECT_SOURCE_DIR}/")
 include_directories("${PROJECT_BINARY_DIR}")
 include_directories("${CLOCKWORK_DIR}")
 
+LINK_DIRECTORIES("/usr/local/lib")
+
 add_executable (Sampler src/sampler.cpp)
 target_link_libraries(Sampler Clockwork "zmq" ${Boost_LIBRARIES})
 
