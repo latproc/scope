@@ -4,7 +4,7 @@ project (Scope)
 set (Scope_VERSION_MAJOR 0)
 set (Scope_VERSION_MINOR 8)
 
-set (CMAKE_CXX_FLAGS "-g -Wall")
+set (CMAKE_CXX_FLAGS "-g -Wall --std=gnu++0x")
 
 set (CLOCKWORK_DIR ${PROJECT_SOURCE_DIR}/../latproc/iod/)
 
@@ -27,7 +27,7 @@ add_library (Clockwork
     ${CLOCKWORK_DIR}/value.cpp 
     ${CLOCKWORK_DIR}/symboltable.cpp
     ${CLOCKWORK_DIR}/options.cpp
-    ${CLOCKWORK_DIR}//message.cpp )
+    ${CLOCKWORK_DIR}//Message.cpp )
 
 include_directories("/usr/local/include")
 include_directories("${PROJECT_SOURCE_DIR}/")
