@@ -202,7 +202,11 @@ protected:
 };
 
 CommandThread::CommandThread() : done(false), socket(*MessagingInterface::getContext(), ZMQ_REP) {
-    socket.bind ("tcp://*:5655");
+		int port = MessagingInterface::uniquePort(10000, 10999);
+		char buf[40];
+		snprintf(buf, 40, "tcp://*:%d", port);
+		std::cerr << "listening for commands on port " << port << "\n";
+    socket.bind (buf);
 }
 
 struct CommandRefresh : public Command {
@@ -463,6 +467,15 @@ std::string escapeNonprintables(const char *buf) {
 	return res;
 }
 
+static bool need_refresh = false;
+
+class SetupConnectMonitor : public EventResponder {
+public:
+    void operator()(const zmq_event_t &event_, const char* addr_) {
+        need_refresh = true;
+    }
+};
+
 
 int main(int argc, const char * argv[])
 {
@@ -497,17 +510,25 @@ int main(int argc, const char * argv[])
     gettimeofday(&start, 0);
     stringstream output;
     for (;;) {
-        try {
-            zmq::pollitem_t items[] = {
+        zmq::pollitem_t items[] = {
                 { subscription_manager.setup, 0, ZMQ_POLLERR | ZMQ_POLLIN, 0 },
                 { subscription_manager.subscriber, 0, ZMQ_POLLERR | ZMQ_POLLIN, 0 },
                 { cmd, 0, ZMQ_POLLERR | ZMQ_POLLIN, 0 }
             };
-			if (!subscription_manager.checkConnections(items, 3, cmd))
-                continue;
-            if ( !(items[1].revents & ZMQ_POLLIN) || (items[1].revents & ZMQ_POLLERR) )
-                continue;
+        try {
+				if (!subscription_manager.checkConnections(items, 3, cmd)) {
+						usleep(100000);
+						continue;
+				}
+			}
+			catch(zmq::error_t err) {
+				std::cerr << zmq_strerror(errno) << "\n";
+				continue;
+			}
+			if ( !(items[1].revents & ZMQ_POLLIN) || (items[1].revents & ZMQ_POLLERR) )
+					continue;
             
+			try {
 			zmq::message_t update;
 			subscription_manager.subscriber.recv(&update, ZMQ_NOBLOCK);
 
