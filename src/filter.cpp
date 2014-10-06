@@ -11,7 +11,6 @@ int main(int argc, char *argv[]) {
 			continuous = true;
 			continue;
 		}
-		int result = 1;
 		rexp_info *info = create_pattern(argv[i]);
 		if (info->compilation_result == 0)
 			patterns.push_back(info);
