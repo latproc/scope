@@ -209,12 +209,13 @@ CommandThread::CommandThread() : done(false), socket(*MessagingInterface::getCon
 		int retries = 3;
 		while (retries>0) {
 			try {
-		    socket.bind (buf);
+                socket.bind (buf);
+                return;
 			}
 			catch (zmq::error_t err) {
 				if (--retries>0) {
 					std::cerr << "error binding to port.." << zmq_strerror(zmq_errno()) << "..trying again\n";
-					usleep(2000000);
+					usleep(100000);
 					continue;
 				}
 				else
@@ -231,6 +232,17 @@ bool CommandRefresh::run(std::vector<Value> &params) {
 	error_str = "refresh command not implemented";
 	return false;
 }
+
+
+struct CommandUnknown : public Command {
+    bool run(std::vector<Value> &params);
+};
+
+bool CommandUnknown::run(std::vector<Value> &params) {
+    error_str = "Unknown command";
+    return false;
+}
+
 
 struct CommandInfo : public Command {
 	bool run(std::vector<Value> &params);
@@ -388,9 +400,10 @@ void CommandThread::operator()() {
 				else if (ds == "unmonitor" || ds == "UNMONITOR") {
 					command = new CommandStopMonitor();
 				}
-				else {
+				else if (ds == "refresh" || ds == "REFRESH") {
 					command = new CommandRefresh();
 				}
+                else command = new CommandUnknown;
 	            if ((*command)(params)) {
 	                //std::cout << command->result() << "\n";
 	                sendMessage(socket, command->result());
