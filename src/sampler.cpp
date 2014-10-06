@@ -204,9 +204,23 @@ protected:
 CommandThread::CommandThread() : done(false), socket(*MessagingInterface::getContext(), ZMQ_REP) {
 		int port = MessagingInterface::uniquePort(10000, 10999);
 		char buf[40];
-		snprintf(buf, 40, "tcp://*:%d", port);
+		snprintf(buf, 40, "tcp://0.0.0.0:%d", port);
 		std::cerr << "listening for commands on port " << port << "\n";
-    socket.bind (buf);
+		int retries = 3;
+		while (retries>0) {
+			try {
+		    socket.bind (buf);
+			}
+			catch (zmq::error_t err) {
+				if (--retries>0) {
+					std::cerr << "error binding to port.." << zmq_strerror(zmq_errno()) << "..trying again\n";
+					usleep(2000000);
+					continue;
+				}
+				else
+					std::cerr << "error binding to port.. giving up. Command port not available\n";
+			}
+		}
 }
 
 struct CommandRefresh : public Command {
