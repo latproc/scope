@@ -15,6 +15,7 @@ long last_t=0, t;
 bool emit_state_names = false;
 bool emit_state_ids = true;
 bool square_wave = false;
+bool help = false;
 
 struct StateInfo {
 	std::string name;
@@ -48,6 +49,19 @@ void labels() {
 }
 
 
+void usage(const char *prog) {
+	std::cerr << "Usage: \n"
+		<< prog << " [options]\n"
+		<< " where options are any of: "
+		<< "  -S   emit state names\n"
+		<< "  -s   do not emit state names\n"
+		<< "  -I   emit state ids\n"
+		<< "  -i   do not emit state ids\n"
+		<< "  -R   synthesize a square wave display\n"
+		<< "  -r   do not synthesize a square wave\n"
+		<< "  -h   show this help text\n";
+}
+
 int main(int argc, char *argv[])
 {
 	for (int i=0; i<argc; ++i) {
@@ -57,7 +71,9 @@ int main(int argc, char *argv[])
 		else if (strcmp(argv[i],"-i") == 0) emit_state_ids = false;
 		else if (strcmp(argv[i],"-R") == 0) square_wave = true;
 		else if (strcmp(argv[i],"-r") == 0) square_wave = false;
+		else if (strcmp(argv[i],"-h") == 0) help = true;
 	}
+	if (help) { usage(argv[0]); return 0;}
 	if (!emit_state_names && !emit_state_ids) emit_state_ids = true;
 
 	/* prime the device list from a file. only devices listed there will 
@@ -79,7 +95,7 @@ int main(int argc, char *argv[])
 	std::string dev, state;
 	int value;
 	std::cin >> t >> dev >> state >> value;
-	while (std::cin.good()) {
+	while (!std::cin.eof()) {
 		t = t/1000; // we work in milliseconds
 		
 		if (t != last_t) {

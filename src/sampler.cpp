@@ -143,7 +143,7 @@ bool SamplerOptions::parseCommandLine(int argc, const char *argv[]) {
         po::store(po::parse_command_line(argc, argv, desc), vm);
         po::notify(vm);    
         if (vm.count("help")) {
-            cout << desc << "\n";
+            cerr << desc << "\n";
             return false;
         }
 		if (vm.count("republish")) 
@@ -285,12 +285,12 @@ bool CommandMonitor::run(std::vector<Value> &params) {
 	zmq::socket_t sock(*MessagingInterface::getContext(), ZMQ_REQ);
 	sock.connect("inproc://remote_commands");
 	sock.send(buf, strlen(buf));
-    std::cout << "sent internal command: " << buf << "\n";
+    cerr << "sent internal command: " << buf << "\n";
 	size_t len = sock.recv(buf, 1000);
 	if (len) {
 		buf[len] = 0;
 		result_str = buf;
-        std::cout << "got internal response: " << buf << "\n";
+        cerr << "got internal response: " << buf << "\n";
 		return true;
 	}
 	else {
@@ -346,7 +346,7 @@ void sendMessage(zmq::socket_t &socket, const char *message) {
 }
 
 void CommandThread::operator()() {
-    std::cout << "------------------ Command Thread Started -----------------\n";
+    cerr << "------------------ Command Thread Started -----------------\n";
     
     while (!done) {
         try {
@@ -361,7 +361,7 @@ void CommandThread::operator()() {
             char *data = (char *)malloc(size+1);
             memcpy(data, request.data(), size);
             data[size] = 0;
-            std::cout << "Command thread received " << data << std::endl;
+            std::cerr << "Command thread received " << data << std::endl;
             std::istringstream iss(data);
 
             std::list<Value> *parts = 0;
@@ -418,7 +418,7 @@ void CommandThread::operator()() {
             free(data);
         }
         catch (std::exception e) {
-			if (errno) std::cout << "error during client communication: " << strerror(errno) << "\n" << std::flush;
+			if (errno) std::cerr << "error during client communication: " << strerror(errno) << "\n" << std::flush;
             if (zmq_errno())
                 std::cerr << zmq_strerror(zmq_errno()) << "\n" << std::flush;
             else
@@ -524,7 +524,7 @@ int main(int argc, const char * argv[])
 	signal(SIGTERM, interrupt_handler);
 	
 	// this should be a separate thread
-    std::cout << "-------- Starting Command Interface ---------\n";
+    std::cerr << "-------- Starting Command Interface ---------\n";
     CommandThread cmdline;
     boost::thread cmd_interface(boost::ref(cmdline));
     
