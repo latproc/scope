@@ -118,8 +118,6 @@ class SamplerOptions {
 	bool ignoreValues() { return ignore_values; }
 	bool onlyNumericValues() { return only_numeric_values; }
 	bool reportMillis() { return use_millis; }
-    void setChannelURL(const char *url) {channel_url = url; }
-    const char *channelURL() { return channel_url.c_str(); }
 };
 
 bool SamplerOptions::parseCommandLine(int argc, const char *argv[]) {
@@ -180,6 +178,7 @@ struct CommandThread {
     bool done;
 private:
     zmq::socket_t socket;
+	std::string channel_name;
 };
 
 struct Command {
@@ -544,9 +543,12 @@ int main(int argc, const char * argv[])
             };
         try {
 				if (!subscription_manager.checkConnections(items, 3, cmd)) {
-						usleep(100000);
-						continue;
+					current_channel = "";
+					usleep(100000);
+					continue;
 				}
+				if (current_channel.length() == 0)
+					current_channel = subscription_manager.current_channel;
 			}
 			catch(zmq::error_t err) {
 				std::cerr << zmq_strerror(errno) << "\n";
