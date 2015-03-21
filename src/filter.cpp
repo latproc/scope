@@ -22,13 +22,15 @@ int main(int argc, char *argv[]) {
 	
 	char buf[100];
 	
-	while (std::cin.getline(buf, 100, '\n') ) {
-		std::list<rexp_info*>::iterator iter = patterns.begin();
-		while (iter != patterns.end()) {
-			rexp_info *info = *iter++;
-			if (execute_pattern(info, buf) == 0) {
-				std::cout << buf << "\n" << std::flush;
-				break;
+	while (!std::cin.eof()) {
+		while (std::cin.getline(buf, 100, '\n') ) {
+			std::list<rexp_info*>::iterator iter = patterns.begin();
+			while (iter != patterns.end()) {
+				rexp_info *info = *iter++;
+				if (execute_pattern(info, buf) == 0) {
+					std::cout << buf << "\n" << std::flush;
+					break;
+				}
 			}
 		}
 	}

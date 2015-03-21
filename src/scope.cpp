@@ -192,4 +192,5 @@ int main(int argc, char *argv[])
 		last_t = t;
 	}
 	emit();
+	std::cout << "End of Scope\n";
 }
