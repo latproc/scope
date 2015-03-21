@@ -36,6 +36,7 @@ struct TimeSeriesGraph {
 		last_row[screen_width] = 0;
 	}
 	void emit();
+	bool plot(long v, char symbol);
 	bool rescaleGraph(long val);
 };
 
@@ -73,12 +74,22 @@ void labels() {
 
 bool TimeSeriesGraph::rescaleGraph(long val) {
 	bool rescaled = false;
-	if (val > 1.0f / 0.95f * max_value) { max_value = val * 1.1f; rescaled = true; }
-	if (val < min_value) { min_value = 0.9f * val; rescaled = true; }
+	if (val > max_value) { max_value = ((val>0) ? 1.1f : 0.9f) * val; rescaled = true; }
+	if (val < min_value) { min_value = ((val>0) ? 0.9f : 1.1f) * val; rescaled = true; }
 	memset(last_row, ' ', screen_width);
 	return rescaled;
 }
 
+bool TimeSeriesGraph::plot(long v, char symbol) {
+	bool changed = false;
+	int col =  (int) (0.95f * screen_width * (v - min_value) / (max_value - min_value) );
+	if (col >= 0 && col <screen_width) {
+		if (last_row[col] == ' ') changed = true;
+		row[ col ] = symbol;
+	}
+	else std::cout <<" col: " << col << "\n";
+	return changed;
+}
 void TimeSeriesGraph::emit() {
 	const char *symbols = "*@#%ABCDEFGHIJKLMNOPQRSTUVWXYZ";
 	int max_sym = strlen(symbols)-1;
@@ -89,18 +100,17 @@ void TimeSeriesGraph::emit() {
 	bool changed = false;
 	while (iter != series.end()) {
 		const std::pair<std::string, long> &pt = *iter++;
-		int col =  (int) (0.95f * screen_width * (pt.second - min_value) / (max_value - min_value) );
-		if (col >= 0 && col <screen_width) {
-			if (last_row[col] == ' ') changed = true;
-			row[ col ] = symbols[symbol_idx];
-		}
-		else std::cout <<" col: " << col << "\n";
+		changed = plot(pt.second, symbols[symbol_idx]);
 		if (symbol_idx++ > max_sym) symbol_idx = max_sym;
 	}
 	if (!only_show_changes || (only_show_changes && changed) ) {
 		std::cout << std::setw(8) << last_t << " " << row << "\n";
 		memcpy(last_row, row, screen_width);
 		memset(row, ' ', screen_width);
+		if (min_value <= 0 && max_value >= 0) plot(0, '|');
+		for (long x=-30000; x<=30000; x+=10000) {
+			if (min_value <= x && max_value >= x) plot(x, (x==0)?'|':'!');
+		}
 	}
 }
 
@@ -175,7 +185,7 @@ int main(int argc, char *argv[])
 		}
 		else {
 			g.series[dev] = value;
-			if (rescaleGraph(g, value)) std::cout << "...\n";
+			if (g.rescaleGraph(value)) std::cout << "...\n";
 			g.emit();
 		}
 		std::cin >> t >> dev >> state >> value;
