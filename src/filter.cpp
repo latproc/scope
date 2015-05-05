@@ -20,10 +20,10 @@ int main(int argc, char *argv[]) {
 		}
 	}
 	
-	char buf[100];
+	char buf[1000];
 	
 	while (!std::cin.eof()) {
-		while (std::cin.getline(buf, 100, '\n') ) {
+		while (std::cin.getline(buf, 1000, '\n') ) {
 			std::list<rexp_info*>::iterator iter = patterns.begin();
 			while (iter != patterns.end()) {
 				rexp_info *info = *iter++;

@@ -317,7 +317,7 @@ bool CommandStopMonitor::run(std::vector<Value> &params) {
 			current_channel.c_str(), params[1].asString().c_str());
 	}
 	else {
-		error_str = "usage: MONITOR machine_name | MONITOR PATTERN pattern | MONITOR PROPERTY property value";
+		error_str = "usage: UNMONITOR machine_name | UNMONITOR PATTERN pattern | UNMONITOR PROPERTY property value";
 		return false;
 	}
 	std::cerr <<buf << "\n";
