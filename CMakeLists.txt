@@ -15,8 +15,28 @@ configure_file (
 
 FIND_PACKAGE(Boost COMPONENTS system thread program_options REQUIRED )
 
+set(HEADER_FILES 
+	${CLOCKWORK_DIR}/MessagingInterface.h
+    ${CLOCKWORK_DIR}/SocketMonitor.h
+    ${CLOCKWORK_DIR}/ConnectionManager.h
+    ${CLOCKWORK_DIR}/MessageLog.h
+    ${CLOCKWORK_DIR}/MessageEncoding.h
+    ${CLOCKWORK_DIR}/regular_expressions.h
+    ${CLOCKWORK_DIR}/Logger.h
+    ${CLOCKWORK_DIR}/anet.h
+    ${CLOCKWORK_DIR}/cJSON.h
+    ${CLOCKWORK_DIR}/DebugExtra.h
+    ${CLOCKWORK_DIR}/value.h
+    ${CLOCKWORK_DIR}/symboltable.h
+    ${CLOCKWORK_DIR}/options.h
+    ${CLOCKWORK_DIR}/rate.h
+    ${CLOCKWORK_DIR}/Message.h
+	)
+
 add_library (Clockwork 
     ${CLOCKWORK_DIR}/MessagingInterface.cpp 
+    ${CLOCKWORK_DIR}/SocketMonitor.cpp 
+    ${CLOCKWORK_DIR}/ConnectionManager.cpp 
     ${CLOCKWORK_DIR}/MessageLog.cpp 
     ${CLOCKWORK_DIR}/MessageEncoding.cpp 
     ${CLOCKWORK_DIR}/regular_expressions.cpp 
@@ -27,7 +47,10 @@ add_library (Clockwork
     ${CLOCKWORK_DIR}/value.cpp 
     ${CLOCKWORK_DIR}/symboltable.cpp
     ${CLOCKWORK_DIR}/options.cpp
-    ${CLOCKWORK_DIR}/Message.cpp )
+    ${CLOCKWORK_DIR}/rate.cpp
+    ${CLOCKWORK_DIR}/Message.cpp 
+	${HEADER_FILES}
+)
 
 include_directories("/usr/local/include")
 include_directories("/opt/local/include")

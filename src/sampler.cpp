@@ -45,9 +45,11 @@ device names are resent.
 #include <fstream>
 #include <signal.h>
 #include "cJSON.h"
-#include <MessagingInterface.h>
 #include <value.h>
 #include <MessageEncoding.h>
+#include <MessagingInterface.h>
+#include <SocketMonitor.h>
+#include <ConnectionManager.h>
 #include <ScopeConfig.h>
 
 using namespace std;
@@ -530,7 +532,8 @@ int main(int argc, const char * argv[])
     zmq::socket_t cmd(*MessagingInterface::getContext(), ZMQ_REP);
     cmd.bind("inproc://remote_commands");
     
-    SubscriptionManager subscription_manager("SAMPLER_CHANNEL");
+    SubscriptionManager subscription_manager("SAMPLER_CHANNEL", eCLOCKWORK, 
+			options.subscriberHost().c_str(), options.subscriberPort());
     
     struct timeval start;
     gettimeofday(&start, 0);
