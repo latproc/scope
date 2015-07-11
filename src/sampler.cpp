@@ -538,6 +538,7 @@ int main(int argc, const char * argv[])
     struct timeval start;
     gettimeofday(&start, 0);
     stringstream output;
+	unsigned int retry_count = 3;
     for (;;) {
         zmq::pollitem_t items[] = {
                 { subscription_manager.setup(), 0, ZMQ_POLLERR | ZMQ_POLLIN, 0 },
@@ -552,9 +553,12 @@ int main(int argc, const char * argv[])
 				}
 				if (current_channel.length() == 0)
 					current_channel = subscription_manager.current_channel;
+				retry_count = 3;
 			}
 			catch(zmq::error_t err) {
 				std::cerr << zmq_strerror(errno) << "\n";
+				if (zmq_errno() == EFSM) retry_count--;
+				if (retry_count == 0) exit(1);
 				continue;
 			}
 			if ( !(items[1].revents & ZMQ_POLLIN) || (items[1].revents & ZMQ_POLLERR) )
