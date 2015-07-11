@@ -540,8 +540,8 @@ int main(int argc, const char * argv[])
     stringstream output;
     for (;;) {
         zmq::pollitem_t items[] = {
-                { subscription_manager.setup, 0, ZMQ_POLLERR | ZMQ_POLLIN, 0 },
-                { subscription_manager.subscriber, 0, ZMQ_POLLERR | ZMQ_POLLIN, 0 },
+                { subscription_manager.setup(), 0, ZMQ_POLLERR | ZMQ_POLLIN, 0 },
+                { subscription_manager.subscriber(), 0, ZMQ_POLLERR | ZMQ_POLLIN, 0 },
                 { cmd, 0, ZMQ_POLLERR | ZMQ_POLLIN, 0 }
             };
         try {
@@ -562,7 +562,7 @@ int main(int argc, const char * argv[])
             
 			try {
 			zmq::message_t update;
-			subscription_manager.subscriber.recv(&update, ZMQ_NOBLOCK);
+			subscription_manager.subscriber().recv(&update, ZMQ_NOBLOCK);
 
 			struct timeval now;
 			gettimeofday(&now, 0);
