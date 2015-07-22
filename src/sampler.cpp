@@ -105,7 +105,7 @@ class SamplerOptions {
     SamplerOptions() : subscribe_to_port(5556), subscribe_to_host("localhost"),
         publish_to_port(5560), publish_to_interface("*"), 
 		republish(false), quiet(false), raw(false), ignore_values(false), only_numeric_values(false),
-		use_millis(false), channel_name("SAMPLER")
+		use_millis(false), channel_name("SAMPLER_CHANNEL")
 	 {}
 	bool parseCommandLine(int argc, const char *argv[]);
 
@@ -120,6 +120,7 @@ class SamplerOptions {
 	bool ignoreValues() { return ignore_values; }
 	bool onlyNumericValues() { return only_numeric_values; }
 	bool reportMillis() { return use_millis; }
+	string &channel() { return channel_name; }
 };
 
 bool SamplerOptions::parseCommandLine(int argc, const char *argv[]) {
@@ -532,7 +533,7 @@ int main(int argc, const char * argv[])
     zmq::socket_t cmd(*MessagingInterface::getContext(), ZMQ_REP);
     cmd.bind("inproc://remote_commands");
     
-    SubscriptionManager subscription_manager("SAMPLER_CHANNEL", eCLOCKWORK, 
+    SubscriptionManager subscription_manager(options.channel().c_str(), eCLOCKWORK, 
 			options.subscriberHost().c_str(), options.subscriberPort());
     
     struct timeval start;
@@ -599,6 +600,16 @@ int main(int argc, const char * argv[])
 						output << get_diff_in_microsecs(&now, &start)/scale 
 							<< "\t" << machine << "\t" << state << "\t" << state_num;
 					}
+					else if (op == "UPDATE") {
+
+						//output << get_diff_in_microsecs(&now, &start)/scale << data << "\n";
+						output << get_diff_in_microsecs(&now, &start)/scale;
+						std::list<Value>::iterator iter = message->begin();
+						while (iter!= message->end()) {
+							const Value &v =  *iter++;
+							output << v; if (iter != message->end()) output << "\t";
+						}
+					}
 					else if (op == "PROPERTY" && message->size() == 3) {
 						std::string machine = message->front().asString();
 						message->pop_front();
@@ -620,7 +631,7 @@ int main(int argc, const char * argv[])
 					}
 				}
 				else {
-		            istringstream iss(data);
+          istringstream iss(data);
 					std::string machine;
 		            iss >> machine >> op;
 					if (op == "STATE") {					
