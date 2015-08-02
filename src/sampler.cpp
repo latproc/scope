@@ -425,7 +425,8 @@ void CommandThread::operator()() {
                 std::cerr << zmq_strerror(zmq_errno()) << "\n" << std::flush;
             else
                 std::cerr << " Exception: " << e.what() << "\n" << std::flush;
-			//if (zmq_errno() != EINTR && zmq_errno() != EAGAIN) abort();
+			if (zmq_errno() == EFSM)
+				exit(1);
         }
     }
     socket.close();
