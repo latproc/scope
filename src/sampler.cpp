@@ -101,11 +101,12 @@ class SamplerOptions {
 	bool use_millis;
 	string channel_name;
     string channel_url;
+	int cw_port;
   public:
     SamplerOptions() : subscribe_to_port(5556), subscribe_to_host("localhost"),
         publish_to_port(5560), publish_to_interface("*"), 
 		republish(false), quiet(false), raw(false), ignore_values(false), only_numeric_values(false),
-		use_millis(false), channel_name("SAMPLER_CHANNEL")
+		use_millis(false), channel_name("SAMPLER_CHANNEL"), cw_port(5555)
 	 {}
 	bool parseCommandLine(int argc, const char *argv[]);
 
@@ -121,6 +122,7 @@ class SamplerOptions {
 	bool onlyNumericValues() { return only_numeric_values; }
 	bool reportMillis() { return use_millis; }
 	string &channel() { return channel_name; }
+	int clockworkPort() { return cw_port; }
 };
 
 bool SamplerOptions::parseCommandLine(int argc, const char *argv[]) {
@@ -139,6 +141,7 @@ bool SamplerOptions::parseCommandLine(int argc, const char *argv[]) {
 		("only-numeric-values", "ignore value changes for non-numeric values")
 		("millisec", "report time in milliseconds")
 		("channel", po::value<string>(), "name of channel to use")
+		("cw-port", po::value<int>(), "clockwork command port (5555)")
         ;
         po::variables_map vm;        
         po::store(po::parse_command_line(argc, argv, desc), vm);
@@ -163,6 +166,7 @@ bool SamplerOptions::parseCommandLine(int argc, const char *argv[]) {
 		if (vm.count("only-numeric-values")) only_numeric_values = true;
 		if (vm.count("millisec")) use_millis = true;
 		if (vm.count("channel")) channel_name = vm["channel"].as<string>();
+		if (vm.count("cw-port")) cw_port = vm["cw-port"].as<int>();
 	}
     catch(exception& e) {
         cerr << "error: " << e.what() << "\n";
@@ -326,17 +330,28 @@ bool CommandStopMonitor::run(std::vector<Value> &params) {
 	std::cerr <<buf << "\n";
 	zmq::socket_t sock(*MessagingInterface::getContext(), ZMQ_REQ);
 	sock.connect("inproc://remote_commands");
-	sock.send(buf, strlen(buf));
-	size_t len = sock.recv(buf, 100);
-	if (len) {
-		buf[len] = 0;
-		result_str = buf;
-		return true;
+	try {
+		sock.send(buf, strlen(buf));
+		size_t len;
+		int count = 0;
+		while ( (len = sock.recv(buf, 100)) == 0 && ++count < 3) ;
+		if (len) {
+			buf[len] = 0;
+			result_str = buf;
+			return true;
+		}
+		else {
+			error_str = "failed to issue command";
+			return false;
+		}
 	}
-	else {
-		error_str = "failed to issue command";
-		return false;
+	catch(zmq::error_t err) {
+		std::cerr << zmq_strerror(errno) << "\n";
+		if (zmq_errno() == EFSM)
+		{FileLogger fl(program_name); fl.f() << zmq_strerror(errno)
+			<< "in CommandStopMonitor::run() \n"<<std::flush; }
 	}
+	return false;
 }
 
 void sendMessage(zmq::socket_t &socket, const char *message) {
@@ -347,11 +362,18 @@ void sendMessage(zmq::socket_t &socket, const char *message) {
     socket.send (reply);
 }
 
+enum RecoveryType { no_recovery, send_recovery, recv_recovery } recovery_type;
+
 void CommandThread::operator()() {
     cerr << "------------------ Command Thread Started -----------------\n";
-    
+	bool attempt_recovery = no_recovery;
+
     while (!done) {
         try {
+			if (attempt_recovery == send_recovery) {
+
+			}
+
             
              zmq::pollitem_t items[] = { { socket, 0, ZMQ_POLLERR | ZMQ_POLLIN, 0 } };
              zmq::poll( &items[0], 1, 500*1000);
@@ -425,8 +447,9 @@ void CommandThread::operator()() {
                 std::cerr << zmq_strerror(zmq_errno()) << "\n" << std::flush;
             else
                 std::cerr << " Exception: " << e.what() << "\n" << std::flush;
-			if (zmq_errno() == EFSM)
+			if (zmq_errno() == EFSM) {
 				exit(1);
+			}
         }
     }
     socket.close();
@@ -506,9 +529,14 @@ public:
     }
 };
 
+const char *program_name;
 
 int main(int argc, const char * argv[])
 {
+	char *pn = strdup(argv[0]);
+	program_name = strdup(basename(pn));
+	free(pn);
+
 	zmq::context_t context;
 	MessagingInterface::setContext(&context);
 	SamplerOptions options;
@@ -536,7 +564,8 @@ int main(int argc, const char * argv[])
     
     SubscriptionManager subscription_manager(options.channel().c_str(), eCLOCKWORK, 
 			options.subscriberHost().c_str(), options.subscriberPort());
-    
+	subscription_manager.configureSetupConnection(
+				options.subscriberHost().c_str(), options.clockworkPort());
     struct timeval start;
     gettimeofday(&start, 0);
     stringstream output;
@@ -559,7 +588,10 @@ int main(int argc, const char * argv[])
 			}
 			catch(zmq::error_t err) {
 				std::cerr << zmq_strerror(errno) << "\n";
-				if (zmq_errno() == EFSM) retry_count--;
+				if (zmq_errno() == EFSM) {
+					retry_count--;
+					exit(0);
+				}
 				if (retry_count == 0) exit(1);
 				continue;
 			}
