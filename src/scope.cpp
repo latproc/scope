@@ -19,6 +19,8 @@ bool square_wave = false;
 bool help = false;
 bool graph = false;
 bool only_show_changes = true;
+long min_y = 1000000;
+long max_y = -1000000;
 
 struct TimeSeriesGraph {
 	long min_value;
@@ -27,7 +29,7 @@ struct TimeSeriesGraph {
 	char *row;
 	char *last_row;
 	std::map<std::string, long> series;
-	TimeSeriesGraph() : min_value(1000000), max_value(-1000000), screen_width(140) {
+	TimeSeriesGraph() : min_value(min_y), max_value(max_y), screen_width(140) {
 		row = new char[screen_width+1];
 		memset(row, ' ', screen_width);
 		row[screen_width] = 0;
@@ -128,6 +130,8 @@ void usage(const char *prog) {
 		<< "  -r   do not synthesize a square wave\n"
 		<< "  -h   show this help text\n"
 		<< "  -g   graphical output (adds -s and -i)"
+		<< "  -m val  minimum of the graph range"
+		<< "  -x val  maximum of the graph range"
 		;
 }
 
@@ -142,6 +146,16 @@ int main(int argc, char *argv[])
 		else if (strcmp(argv[i],"-r") == 0) square_wave = false;
 		else if (strcmp(argv[i],"-h") == 0) help = true;
 		else if (strcmp(argv[i],"-g") == 0) { graph = true; emit_state_ids = false; emit_state_names = false; }
+		else if (strcmp(argv[i],"-m") == 0 && i+1<argc) {
+			char *q;
+			long x = strtol(argv[++i], &q, 10);
+			if (*q == 0) min_y = x;
+		}
+		else if (strcmp(argv[i],"-x") == 0 && i+1<argc) {
+			char *q;
+			long x = strtol(argv[++i], &q, 10);
+			if (*q == 0) max_y = x;
+		}
 	}
 	if (help) { usage(argv[0]); return 0;}
 	if (!emit_state_names && !emit_state_ids) emit_state_ids = true;
