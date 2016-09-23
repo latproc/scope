@@ -39,7 +39,8 @@ device names are resent.
 #include <zmq.hpp>
 #include <sstream>
 #include <string.h>
-#include "Logger.h"
+#include <Logger.h>
+#include <DebugExtra.h>
 #include <inttypes.h>
 #include <stdlib.h>
 #include <fstream>
@@ -106,7 +107,7 @@ class SamplerOptions {
     SamplerOptions() : subscribe_to_port(5556), subscribe_to_host("localhost"),
         publish_to_port(5560), publish_to_interface("*"), 
 		republish(false), quiet(false), raw(false), ignore_values(false), only_numeric_values(false),
-		use_millis(false), channel_name("SAMPLER_CHANNEL"), cw_port(5555)
+		use_millis(true), channel_name("SAMPLER_CHANNEL"), cw_port(5555)
 	 {}
 	bool parseCommandLine(int argc, const char *argv[]);
 
@@ -139,7 +140,8 @@ bool SamplerOptions::parseCommandLine(int argc, const char *argv[]) {
 		("raw", "process all received messages, not just state and value changes")
 		("ignore-values", "ignore value changes, only process state changes")
 		("only-numeric-values", "ignore value changes for non-numeric values")
-		("millisec", "report time in milliseconds")
+		("millisec", "report time in milliseconds (default)")
+		("microsec", "report time in microseconds")
 		("channel", po::value<string>(), "name of channel to use")
 		("cw-port", po::value<int>(), "clockwork command port (5555)")
         ;
@@ -165,6 +167,7 @@ bool SamplerOptions::parseCommandLine(int argc, const char *argv[]) {
 		if (vm.count("ignore-values")) ignore_values = true;
 		if (vm.count("only-numeric-values")) only_numeric_values = true;
 		if (vm.count("millisec")) use_millis = true;
+		if (vm.count("microsec")) use_millis = false;
 		if (vm.count("channel")) channel_name = vm["channel"].as<string>();
 		if (vm.count("cw-port")) cw_port = vm["cw-port"].as<int>();
 	}
@@ -370,11 +373,7 @@ void CommandThread::operator()() {
 
     while (!done) {
         try {
-			if (attempt_recovery == send_recovery) {
 
-			}
-
-            
              zmq::pollitem_t items[] = { { socket, 0, ZMQ_POLLERR | ZMQ_POLLIN, 0 } };
              zmq::poll( &items[0], 1, 500*1000);
              if ( !(items[0].revents & ZMQ_POLLIN) ) continue;
@@ -544,6 +543,7 @@ int main(int argc, const char * argv[])
 	
 	if (options.quietMode() && !options.publish())
 		cerr << "Warning: not writing to stdout or zmq\n";
+	//LogState::instance()->insert(DebugExtra::instance()->DEBUG_CHANNELS);
 
 	MessagingInterface *mif = 0;
 	if (options.publish())
