@@ -90,6 +90,7 @@ void save_state_names() {
 }
 
 class SamplerOptions {
+	static SamplerOptions *_instance;
     int subscribe_to_port;
     string subscribe_to_host;
     int publish_to_port;
@@ -103,12 +104,15 @@ class SamplerOptions {
 	string channel_name;
     string channel_url;
 	int cw_port;
-  public:
+	bool debug_flag;
+
     SamplerOptions() : subscribe_to_port(5556), subscribe_to_host("localhost"),
         publish_to_port(5560), publish_to_interface("*"), 
 		republish(false), quiet(false), raw(false), ignore_values(false), only_numeric_values(false),
-		use_millis(true), channel_name("SAMPLER_CHANNEL"), cw_port(5555)
+		use_millis(true), channel_name("SAMPLER_CHANNEL"), cw_port(5555), debug_flag(false)
 	 {}
+  public:
+	static SamplerOptions *instance() { if (!_instance) _instance = new SamplerOptions(); return _instance; }
 	bool parseCommandLine(int argc, const char *argv[]);
 
 	bool publish() { return republish; }
@@ -124,6 +128,7 @@ class SamplerOptions {
 	bool reportMillis() { return use_millis; }
 	string &channel() { return channel_name; }
 	int clockworkPort() { return cw_port; }
+	static bool debug() { return instance()->debug_flag; }
 };
 
 bool SamplerOptions::parseCommandLine(int argc, const char *argv[]) {
@@ -144,6 +149,7 @@ bool SamplerOptions::parseCommandLine(int argc, const char *argv[]) {
 		("microsec", "report time in microseconds")
 		("channel", po::value<string>(), "name of channel to use")
 		("cw-port", po::value<int>(), "clockwork command port (5555)")
+		("debug", "debug info")
         ;
         po::variables_map vm;        
         po::store(po::parse_command_line(argc, argv, desc), vm);
@@ -170,6 +176,7 @@ bool SamplerOptions::parseCommandLine(int argc, const char *argv[]) {
 		if (vm.count("microsec")) use_millis = false;
 		if (vm.count("channel")) channel_name = vm["channel"].as<string>();
 		if (vm.count("cw-port")) cw_port = vm["cw-port"].as<int>();
+		if (vm.count("debug")) debug_flag = true;
 	}
     catch(exception& e) {
         cerr << "error: " << e.what() << "\n";
@@ -275,8 +282,13 @@ bool CommandMonitor::run(std::vector<Value> &params) {
 		return false;
 	}
 	if (params.size() == 3 && params[1] == "PATTERN") {
+		char *raw_pat = strdup(params[2].asString().c_str());
+		const char *pat = raw_pat;
+		if (*raw_pat == '"') ++pat;
+		if (*pat && pat[strlen(pat)-1] == '"') raw_pat[strlen(raw_pat)-1] = 0;
 		snprintf(buf, 1000, "CHANNEL %s ADD MONITOR PATTERN %s", 
-			current_channel.c_str(), params[2].asString().c_str());
+			current_channel.c_str(), pat);
+		free(raw_pat);
 	}
 	else if (params.size() == 4 && params[1] == "PROPERTY") {
 		snprintf(buf, 1000, "CHANNEL %s ADD MONITOR PROPERTY %s \"%s\"",
@@ -290,16 +302,16 @@ bool CommandMonitor::run(std::vector<Value> &params) {
 		error_str = "usage: MONITOR machine_name | MONITOR PATTERN pattern";
 		return false;
 	}
-	std::cerr <<buf << "\n";
+	if (SamplerOptions::debug()) std::cerr <<buf << "\n";
 	zmq::socket_t sock(*MessagingInterface::getContext(), ZMQ_REQ);
 	sock.connect("inproc://remote_commands");
 	sock.send(buf, strlen(buf));
-    cerr << "sent internal command: " << buf << "\n";
+    if (SamplerOptions::debug()) cerr << "sent internal command: " << buf << "\n";
 	size_t len = sock.recv(buf, 1000);
 	if (len) {
 		buf[len] = 0;
 		result_str = buf;
-        cerr << "got internal response: " << buf << "\n";
+        if (SamplerOptions::debug()) cerr << "got internal response: " << buf << "\n";
 		return true;
 	}
 	else {
@@ -319,6 +331,10 @@ bool CommandStopMonitor::run(std::vector<Value> &params) {
 		return false;
 	}
 	if (params.size() == 3 && params[1] == "PATTERN") {
+		char *raw_pat = strdup(params[2].asString().c_str());
+		const char *pat = raw_pat;
+		if (*raw_pat == '"') ++pat;
+		if (*pat && pat[strlen(pat)-1] == '"') raw_pat[strlen(raw_pat)-1] = 0;
 		snprintf(buf, 1000, "CHANNEL %s REMOVE MONITOR PATTERN %s", 
 			current_channel.c_str(), params[2].asString().c_str());
 	}
@@ -330,7 +346,7 @@ bool CommandStopMonitor::run(std::vector<Value> &params) {
 		error_str = "usage: UNMONITOR machine_name | UNMONITOR PATTERN pattern | UNMONITOR PROPERTY property value";
 		return false;
 	}
-	std::cerr <<buf << "\n";
+	if (SamplerOptions::debug()) std::cerr <<buf << "\n";
 	zmq::socket_t sock(*MessagingInterface::getContext(), ZMQ_REQ);
 	sock.connect("inproc://remote_commands");
 	try {
@@ -368,7 +384,7 @@ void sendMessage(zmq::socket_t &socket, const char *message) {
 enum RecoveryType { no_recovery, send_recovery, recv_recovery } recovery_type;
 
 void CommandThread::operator()() {
-    cerr << "------------------ Command Thread Started -----------------\n";
+    if (SamplerOptions::debug()) cerr << "------------------ Command Thread Started -----------------\n";
 	bool attempt_recovery = no_recovery;
 
     while (!done) {
@@ -384,7 +400,7 @@ void CommandThread::operator()() {
             char *data = (char *)malloc(size+1);
             memcpy(data, request.data(), size);
             data[size] = 0;
-            std::cerr << "Command thread received " << data << std::endl;
+            if (SamplerOptions::debug()) std::cerr << "Command thread received " << data << std::endl;
             std::istringstream iss(data);
 
             std::list<Value> *parts = 0;
@@ -414,7 +430,7 @@ void CommandThread::operator()() {
 			{
 				Command *command = 0;
 				std::string ds(params[0].asString());
-				if (ds == "info") {
+				if (ds == "info" || ds == "INFO") {
 					command = new CommandInfo();
 				}
 				else if (ds == "monitor" || ds == "MONITOR") {
@@ -428,7 +444,6 @@ void CommandThread::operator()() {
 				}
                 else command = new CommandUnknown;
 	            if ((*command)(params)) {
-	                //std::cout << command->result() << "\n";
 	                sendMessage(socket, command->result());
 	            }
 	            else {
@@ -529,6 +544,7 @@ public:
 };
 
 const char *program_name;
+SamplerOptions *SamplerOptions::_instance = 0;
 
 int main(int argc, const char * argv[])
 {
@@ -538,12 +554,13 @@ int main(int argc, const char * argv[])
 
 	zmq::context_t context;
 	MessagingInterface::setContext(&context);
-	SamplerOptions options;
+	SamplerOptions &options = *SamplerOptions::instance();
 	if (!options.parseCommandLine(argc, argv)) return 1;
 	
 	if (options.quietMode() && !options.publish())
 		cerr << "Warning: not writing to stdout or zmq\n";
-	//LogState::instance()->insert(DebugExtra::instance()->DEBUG_CHANNELS);
+	if (options.debug()) 
+		LogState::instance()->insert(DebugExtra::instance()->DEBUG_CHANNELS);
 
 	MessagingInterface *mif = 0;
 	if (options.publish())
@@ -555,7 +572,7 @@ int main(int argc, const char * argv[])
 	signal(SIGTERM, interrupt_handler);
 	
 	// this should be a separate thread
-    std::cerr << "-------- Starting Command Interface ---------\n";
+    if (SamplerOptions::debug()) std::cerr << "-------- Starting Command Interface ---------\n";
     CommandThread cmdline;
     boost::thread cmd_interface(boost::ref(cmdline));
     
@@ -580,6 +597,7 @@ int main(int argc, const char * argv[])
 				if (!subscription_manager.checkConnections(items, 3, cmd)) {
 					current_channel = "";
 					usleep(100000);
+    				gettimeofday(&start, 0);
 					continue;
 				}
 				if (current_channel.length() == 0)
