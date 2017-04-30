@@ -4,6 +4,11 @@ project (Scope)
 set (Scope_VERSION_MAJOR 0)
 set (Scope_VERSION_MINOR 8)
 
+if (EXISTS "${PROJECT_SOURCE_DIR}/LocalCMakeLists.txt")
+	include("${PROJECT_SOURCE_DIR}/LocalCMakeLists.txt")
+endif()
+
+
 set (CMAKE_CXX_FLAGS "-g -Wall --std=gnu++0x")
 
 set (CLOCKWORK_DIR ${PROJECT_SOURCE_DIR}/../latproc/iod/src/)
@@ -21,6 +26,7 @@ set(HEADER_FILES
     ${CLOCKWORK_DIR}/ConnectionManager.h
     ${CLOCKWORK_DIR}/MessageLog.h
     ${CLOCKWORK_DIR}/MessageEncoding.h
+	${CLOCKWORK_DIR}/MessageHeader.h
     ${CLOCKWORK_DIR}/regular_expressions.h
     ${CLOCKWORK_DIR}/Logger.h
     ${CLOCKWORK_DIR}/anet.h
@@ -39,6 +45,7 @@ add_library (Clockwork
     ${CLOCKWORK_DIR}/ConnectionManager.cpp 
     ${CLOCKWORK_DIR}/MessageLog.cpp 
     ${CLOCKWORK_DIR}/MessageEncoding.cpp 
+	${CLOCKWORK_DIR}/MessageHeader.cpp 
     ${CLOCKWORK_DIR}/regular_expressions.cpp 
     ${CLOCKWORK_DIR}/Logger.cpp
     ${CLOCKWORK_DIR}/anet.c

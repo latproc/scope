@@ -4,8 +4,6 @@ all:	build sampler filter scope
 
 build:
 	mkdir build
-
-build/CMakeFiles:	build
 	(cd build; cmake ..; make )
 
 scope:	

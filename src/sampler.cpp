@@ -52,6 +52,7 @@ device names are resent.
 #include <SocketMonitor.h>
 #include <ConnectionManager.h>
 #include <ScopeConfig.h>
+#include <MessageHeader.h>
 
 using namespace std;
 
@@ -585,6 +586,7 @@ int main(int argc, const char * argv[])
 				options.subscriberHost().c_str(), options.clockworkPort());
     struct timeval start;
     gettimeofday(&start, 0);
+	uint64_t first_message_time = 0;
     stringstream output;
 	unsigned int retry_count = 3;
     for (;;) {
@@ -617,19 +619,26 @@ int main(int argc, const char * argv[])
 					continue;
             
 			try {
+#if 0
 			zmq::message_t update;
 			subscription_manager.subscriber().recv(&update, ZMQ_NOBLOCK);
-
-			struct timeval now;
-			gettimeofday(&now, 0);
-
-			long scale = 1;
-			if (options.reportMillis()) scale = 1000;
-
 			long len = update.size();
 			char *data = (char *)malloc(len+1);
 			memcpy(data, update.data(), len);
 			data[len] = 0;
+#else
+			MessageHeader mh;
+			char *data = 0;
+			size_t len = 0;
+			if (!safeRecv(subscription_manager.subscriber(), &data, &len, false, 1, mh) ) {
+				std::cout << "failed to receive message\n";
+			}
+			if (first_message_time == 0) first_message_time = mh.start_time;
+#endif
+ 
+			long scale = 1;
+			if (options.reportMillis()) scale = 1000;
+
 			output.str("");	
 			output.clear();
 			if (options.rawMode()) {
@@ -648,13 +657,15 @@ int main(int argc, const char * argv[])
 						map<string, int>::iterator idx = device_map.find(machine);
 						if (idx == device_map.end()) //new machine
 							device_map[machine] = next_device_num++;
-						output << get_diff_in_microsecs(&now, &start)/scale 
+						//output << get_diff_in_microsecs(&now, &start)/scale
+						output << (mh.start_time - first_message_time)/scale 
 							<< "\t" << machine << "\t" << state << "\t" << state_num;
 					}
 					else if (op == "UPDATE") {
 
 						//output << get_diff_in_microsecs(&now, &start)/scale << data << "\n";
-						output << get_diff_in_microsecs(&now, &start)/scale;
+						//output << get_diff_in_microsecs(&now, &start)/scale;
+						output << (mh.start_time - first_message_time)/scale; 
 						std::list<Value>::iterator iter = message->begin();
 						while (iter!= message->end()) {
 							const Value &v =  *iter++;
@@ -673,7 +684,8 @@ int main(int argc, const char * argv[])
 						if (idx == device_map.end()) //new machine
 							device_map[property] = next_device_num++;
 						
-						output << get_diff_in_microsecs(&now, &start)/ scale
+						//output << get_diff_in_microsecs(&now, &start)/ scale
+						output << (mh.start_time - first_message_time)/scale 
 							<< "\t" << property << "\tvalue\t";
 						if (val.kind == Value::t_string)
 						 	output << "\"" << escapeNonprintables(val.asString().c_str()) << "\"";
@@ -682,7 +694,9 @@ int main(int argc, const char * argv[])
 					}
 				}
 				else {
-          istringstream iss(data);
+					struct timeval now;
+					gettimeofday(&now, 0);
+					istringstream iss(data);
 					std::string machine;
 		            iss >> machine >> op;
 					if (op == "STATE") {					
