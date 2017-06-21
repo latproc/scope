@@ -544,7 +544,6 @@ public:
     }
 };
 
-const char *program_name;
 SamplerOptions *SamplerOptions::_instance = 0;
 
 int main(int argc, const char * argv[])
