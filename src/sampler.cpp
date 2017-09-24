@@ -106,11 +106,13 @@ class SamplerOptions {
     string channel_url;
 	int cw_port;
 	bool debug_flag;
+	uint64_t user_start_time; // user provided base time
 
     SamplerOptions() : subscribe_to_port(5556), subscribe_to_host("localhost"),
         publish_to_port(5560), publish_to_interface("*"), 
 		republish(false), quiet(false), raw(false), ignore_values(false), only_numeric_values(false),
-		use_millis(true), channel_name("SAMPLER_CHANNEL"), cw_port(5555), debug_flag(false)
+		use_millis(true), channel_name("SAMPLER_CHANNEL"), cw_port(5555), debug_flag(false),
+		user_start_time(0)
 	 {}
   public:
 	static SamplerOptions *instance() { if (!_instance) _instance = new SamplerOptions(); return _instance; }
@@ -130,6 +132,10 @@ class SamplerOptions {
 	string &channel() { return channel_name; }
 	int clockworkPort() { return cw_port; }
 	static bool debug() { return instance()->debug_flag; }
+	void parseStartTime ( uint64_t st) {
+		
+	}
+	uint64_t userStartTime() { return user_start_time; }
 };
 
 bool SamplerOptions::parseCommandLine(int argc, const char *argv[]) {
@@ -151,6 +157,7 @@ bool SamplerOptions::parseCommandLine(int argc, const char *argv[]) {
 		("channel", po::value<string>(), "name of channel to use")
 		("cw-port", po::value<int>(), "clockwork command port (5555)")
 		("debug", "debug info")
+		("start", po::value<string>(), "start time for time deltas")
         ;
         po::variables_map vm;        
         po::store(po::parse_command_line(argc, argv, desc), vm);
@@ -178,6 +185,7 @@ bool SamplerOptions::parseCommandLine(int argc, const char *argv[]) {
 		if (vm.count("channel")) channel_name = vm["channel"].as<string>();
 		if (vm.count("cw-port")) cw_port = vm["cw-port"].as<int>();
 		if (vm.count("debug")) debug_flag = true;
+		if (vm.count("start")) parseStartTime(vm["start"].as<uint64_t>());
 	}
     catch(exception& e) {
         cerr << "error: " << e.what() << "\n";
@@ -386,7 +394,6 @@ enum RecoveryType { no_recovery, send_recovery, recv_recovery } recovery_type;
 
 void CommandThread::operator()() {
     if (SamplerOptions::debug()) cerr << "------------------ Command Thread Started -----------------\n";
-	bool attempt_recovery = no_recovery;
 
     while (!done) {
         try {
@@ -585,7 +592,7 @@ int main(int argc, const char * argv[])
 				options.subscriberHost().c_str(), options.clockworkPort());
     struct timeval start;
     gettimeofday(&start, 0);
-	uint64_t first_message_time = 0;
+	uint64_t first_message_time = options.userStartTime(); // can be initialised on the commandline
     stringstream output;
 	unsigned int retry_count = 3;
     for (;;) {
@@ -648,7 +655,7 @@ int main(int argc, const char * argv[])
 				string machine, property, op, state;
 				Value val(SymbolTable::Null);
 				if (MessageEncoding::getCommand(data, op, &message)) {
-					if (op == "STATE"&& message->size() == 2) {
+					if (op == "STATE" && message->size() == 2) {
 						machine = message->front().asString();
 						message->pop_front();
 						state = message->front().asString();
@@ -656,14 +663,11 @@ int main(int argc, const char * argv[])
 						map<string, int>::iterator idx = device_map.find(machine);
 						if (idx == device_map.end()) //new machine
 							device_map[machine] = next_device_num++;
-						//output << get_diff_in_microsecs(&now, &start)/scale
 						output << (mh.start_time - first_message_time)/scale 
 							<< "\t" << machine << "\t" << state << "\t" << state_num;
 					}
 					else if (op == "UPDATE") {
 
-						//output << get_diff_in_microsecs(&now, &start)/scale << data << "\n";
-						//output << get_diff_in_microsecs(&now, &start)/scale;
 						output << (mh.start_time - first_message_time)/scale; 
 						std::list<Value>::iterator iter = message->begin();
 						while (iter!= message->end()) {
@@ -683,7 +687,6 @@ int main(int argc, const char * argv[])
 						if (idx == device_map.end()) //new machine
 							device_map[property] = next_device_num++;
 						
-						//output << get_diff_in_microsecs(&now, &start)/ scale
 						output << (mh.start_time - first_message_time)/scale 
 							<< "\t" << property << "\tvalue\t";
 						if (val.kind == Value::t_string)

@@ -8,6 +8,9 @@ if (EXISTS "${PROJECT_SOURCE_DIR}/LocalCMakeLists.txt")
 	include("${PROJECT_SOURCE_DIR}/LocalCMakeLists.txt")
 endif()
 
+set (CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR})
+set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${PROJECT_SOURCE_DIR}/cmake/Modules/")
+
 
 set (CMAKE_CXX_FLAGS "-g -Wall --std=gnu++0x")
 
@@ -19,6 +22,7 @@ configure_file (
 )
 
 FIND_PACKAGE(Boost COMPONENTS system thread program_options REQUIRED )
+FIND_PACKAGE(ZeroMQ REQUIRED)
 
 set(HEADER_FILES 
 	${CLOCKWORK_DIR}/MessagingInterface.h
@@ -60,6 +64,7 @@ add_library (Clockwork
 )
 
 include_directories("/usr/local/include")
+include_directories(${ZeroMQ_INCLUDE_DIR})
 include_directories("/opt/local/include")
 include_directories("${PROJECT_SOURCE_DIR}/")
 include_directories("${PROJECT_BINARY_DIR}")
@@ -69,10 +74,10 @@ LINK_DIRECTORIES("/usr/local/lib")
 LINK_DIRECTORIES("/opt/local/lib")
 
 add_executable (Sampler src/sampler.cpp)
-target_link_libraries(Sampler Clockwork "zmq" ${Boost_LIBRARIES})
+target_link_libraries(Sampler Clockwork ${ZeroMQ_LIBRARY} ${Boost_LIBRARIES})
 
 add_executable (Filter src/filter.cpp)
-target_link_libraries(Filter Clockwork "zmq" ${Boost_LIBRARIES})
+target_link_libraries(Filter Clockwork ${ZeroMQ_Library} ${Boost_LIBRARIES})
 
 add_executable (Scope src/scope.cpp)
-target_link_libraries(Filter Clockwork "zmq" ${Boost_LIBRARIES})
+target_link_libraries(Filter Clockwork ${ZeroMQ_Library} ${Boost_LIBRARIES})
