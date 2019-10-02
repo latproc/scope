@@ -53,6 +53,7 @@ device names are resent.
 #include <ConnectionManager.h>
 #include <ScopeConfig.h>
 #include <MessageHeader.h>
+#include <boost/date_time/posix_time/posix_time.hpp>
 
 using namespace std;
 
@@ -107,12 +108,15 @@ class SamplerOptions {
 	int cw_port;
 	bool debug_flag;
 	uint64_t user_start_time; // user provided base time
+	bool timestamp;
+	string output_format;
+	string date_format;
 
     SamplerOptions() : subscribe_to_port(5556), subscribe_to_host("localhost"),
         publish_to_port(5560), publish_to_interface("*"), 
 		republish(false), quiet(false), raw(false), ignore_values(false), only_numeric_values(false),
 		use_millis(true), channel_name("SAMPLER_CHANNEL"), cw_port(5555), debug_flag(false),
-		user_start_time(0)
+		user_start_time(0), timestamp(false), output_format("std"), date_format("iso8601")
 	 {}
   public:
 	static SamplerOptions *instance() { if (!_instance) _instance = new SamplerOptions(); return _instance; }
@@ -136,6 +140,9 @@ class SamplerOptions {
 		
 	}
 	uint64_t userStartTime() { return user_start_time; }
+	bool emitTimestamp() { return timestamp; }
+	const std::string &format() { return output_format; }
+	const std::string &dateFormat() { return date_format; }
 };
 
 bool SamplerOptions::parseCommandLine(int argc, const char *argv[]) {
@@ -152,12 +159,15 @@ bool SamplerOptions::parseCommandLine(int argc, const char *argv[]) {
 		("raw", "process all received messages, not just state and value changes")
 		("ignore-values", "ignore value changes, only process state changes")
 		("only-numeric-values", "ignore value changes for non-numeric values")
-		("millisec", "report time in milliseconds (default)")
-		("microsec", "report time in microseconds")
+		("millisec", "report time offset in milliseconds (default)")
+		("microsec", "report time offset in microseconds")
+		("timestamp", "timestamp each result rather than displaying offset")
 		("channel", po::value<string>(), "name of channel to use")
 		("cw-port", po::value<int>(), "clockwork command port (5555)")
 		("debug", "debug info")
 		("start", po::value<string>(), "start time for time deltas")
+		("format", po::value<string>(), "select output format (std, kv, kvq)")
+		("date-format", po::value<string>(), "timestamp format (unix, iso8601)")
         ;
         po::variables_map vm;        
         po::store(po::parse_command_line(argc, argv, desc), vm);
@@ -186,6 +196,9 @@ bool SamplerOptions::parseCommandLine(int argc, const char *argv[]) {
 		if (vm.count("cw-port")) cw_port = vm["cw-port"].as<int>();
 		if (vm.count("debug")) debug_flag = true;
 		if (vm.count("start")) parseStartTime(vm["start"].as<uint64_t>());
+		if (vm.count("timestamp")) timestamp = true;
+		if (vm.count("format")) output_format = vm["format"].as<string>();
+		if (vm.count("date-format")) output_format = vm["date-format"].as<string>();
 	}
     catch(exception& e) {
         cerr << "error: " << e.what() << "\n";
@@ -553,6 +566,28 @@ public:
 
 SamplerOptions *SamplerOptions::_instance = 0;
 
+std::ostream &timestamp(std::ostream &out, uint64_t offset, long scale, bool use_datetime, const string &dateformat) {
+	using namespace boost::posix_time;
+	if (use_datetime) {
+		if (dateformat == "unix") {
+			time_t rawtime;
+			struct tm * timeinfo;
+
+			time (&rawtime);
+			timeinfo = localtime (&rawtime);
+			return out << asctime(timeinfo);
+		}
+		else if (dateformat == "iso8601") {
+			ptime t = microsec_clock::universal_time();
+			return out << to_iso_extended_string(t) << "Z";
+		}
+	}
+	else {
+		return out << offset / scale;
+	}
+	return out;
+}
+
 int main(int argc, const char * argv[])
 {
 	char *pn = strdup(argv[0]);
@@ -566,8 +601,8 @@ int main(int argc, const char * argv[])
 	
 	if (options.quietMode() && !options.publish())
 		cerr << "Warning: not writing to stdout or zmq\n";
-	if (options.debug()) 
-		LogState::instance()->insert(DebugExtra::instance()->DEBUG_CHANNELS);
+//	if (options.debug()) 
+//		LogState::instance()->insert(DebugExtra::instance()->DEBUG_CHANNELS);
 
 	MessagingInterface *mif = 0;
 	if (options.publish())
@@ -663,8 +698,22 @@ int main(int argc, const char * argv[])
 						map<string, int>::iterator idx = device_map.find(machine);
 						if (idx == device_map.end()) //new machine
 							device_map[machine] = next_device_num++;
-						output << (mh.start_time - first_message_time)/scale 
-							<< "\t" << machine << "\t" << state << "\t" << state_num;
+						if (options.format() == "std") {
+							timestamp(output, mh.start_time - first_message_time, scale, options.emitTimestamp(), options.dateFormat());
+							output << "\t" << machine << "\t" << state << "\t" << state_num;
+						}
+						else if (options.format() == "kv") {
+							output << "machine: " << machine << ", state: " << state << ", timestamp: ";
+							timestamp(output, mh.start_time - first_message_time, scale, options.emitTimestamp(), options.dateFormat());
+						}
+						else if (options.format() == "kvq") {
+							output << "\"machine\": \"" 
+								<< machine << "\", \"state\": \"" 
+								<< state << "\", \"timestamp\": ";
+							if (options.emitTimestamp()) output << "\"";
+							timestamp(output, mh.start_time - first_message_time, scale, options.emitTimestamp(), options.dateFormat());
+							if (options.emitTimestamp()) output << "\"";
+						}
 					}
 					else if (op == "UPDATE") {
 
@@ -686,13 +735,32 @@ int main(int argc, const char * argv[])
 						map<string, int>::iterator idx = device_map.find(property);
 						if (idx == device_map.end()) //new machine
 							device_map[property] = next_device_num++;
-						
-						output << (mh.start_time - first_message_time)/scale 
-							<< "\t" << property << "\tvalue\t";
-						if (val.kind == Value::t_string)
-						 	output << "\"" << escapeNonprintables(val.asString().c_str()) << "\"";
+
+						std::string value_str;
+						if (val.kind == Value::t_string) {
+							value_str = "\"";
+						 	value_str += escapeNonprintables(val.asString().c_str());
+							value_str += "\"";
+						}
 						else
-							output << escapeNonprintables(val.asString().c_str());
+							value_str = escapeNonprintables(val.asString().c_str());
+
+						if (options.format() == "std") {
+							timestamp(output, mh.start_time - first_message_time, scale, options.emitTimestamp(), options.dateFormat());
+							output << "\t" << property << "\tvalue\t" << value_str;
+						}
+						else if (options.format() == "kv") {
+							output << "machine: " << machine << ", " << prop << ": " << value_str << ", timestamp: ";
+							timestamp(output, mh.start_time - first_message_time, scale, options.emitTimestamp(), options.dateFormat());
+						}
+						else if (options.format() == "kvq") {
+							output << "\"machine\": \"" 
+								<< machine << "\", \"" << prop << "\": "
+								<< value_str << ", \"timestamp\": ";
+							if (options.emitTimestamp()) output << "\"";
+							timestamp(output, mh.start_time - first_message_time, scale, options.emitTimestamp(), options.dateFormat());
+							if (options.emitTimestamp()) output << "\"";
+						}
 					}
 				}
 				else {
