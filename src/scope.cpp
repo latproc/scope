@@ -129,9 +129,9 @@ void usage(const char *prog) {
 		<< "  -R   synthesize a square wave display\n"
 		<< "  -r   do not synthesize a square wave\n"
 		<< "  -h   show this help text\n"
-		<< "  -g   graphical output (adds -s and -i)"
-		<< "  -m val  minimum of the graph range"
-		<< "  -x val  maximum of the graph range"
+		<< "  -g   graphical output (adds -s and -i)\n"
+		<< "  -m val  minimum of the graph range\n"
+		<< "  -x val  maximum of the graph range\n"
 		;
 }
 
@@ -179,9 +179,9 @@ int main(int argc, char *argv[])
 	if (!graph) labels();
 
 	std::string dev, state;
-	int value;
+	double value;
 	std::cin >> t >> dev >> state >> value;
-	while (!std::cin.eof()) {
+	while (std::cin.good() && !std::cin.eof()) {
 		t = t/1000; // we work in milliseconds
 		
 		if (!graph) {

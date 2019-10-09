@@ -6,15 +6,21 @@ build:
 	mkdir build
 	(cd build; cmake ..; make )
 
-scope:	build/Scope
+build/Scope:	src/scope.cpp
+
+build/Filter:	src/filter.cpp
+
+build/Sample: src/sampler.cpp
+
+scope:	build/Scope src/scope.cpp
 	(cd build; cmake ..; make )
 	cp build/Scope scope
 
-filter:	build/Filter
+filter:	build/Filter src/filter.cpp
 	(cd build; cmake ..; make )
 	cp build/Filter filter
 
-sampler:	build/Sampler
+sampler:	build/Sampler src/sampler.cpp
 	(cd build; cmake ..; make )
 	cp build/Sampler sampler
 

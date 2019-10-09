@@ -167,7 +167,7 @@ bool SamplerOptions::parseCommandLine(int argc, const char *argv[]) {
 		("debug", "debug info")
 		("start", po::value<string>(), "start time for time deltas")
 		("format", po::value<string>(), "select output format (std, kv, kvq)")
-		("date-format", po::value<string>(), "timestamp format (unix, iso8601)")
+		("date-format", po::value<string>(), "timestamp format (posix, iso8601) (implies --timestamp)")
         ;
         po::variables_map vm;        
         po::store(po::parse_command_line(argc, argv, desc), vm);
@@ -198,7 +198,10 @@ bool SamplerOptions::parseCommandLine(int argc, const char *argv[]) {
 		if (vm.count("start")) parseStartTime(vm["start"].as<uint64_t>());
 		if (vm.count("timestamp")) timestamp = true;
 		if (vm.count("format")) output_format = vm["format"].as<string>();
-		if (vm.count("date-format")) output_format = vm["date-format"].as<string>();
+		if (vm.count("date-format")) {
+						date_format = vm["date-format"].as<string>();
+						timestamp = true;
+		}
 	}
     catch(exception& e) {
         cerr << "error: " << e.what() << "\n";
@@ -569,18 +572,23 @@ SamplerOptions *SamplerOptions::_instance = 0;
 std::ostream &timestamp(std::ostream &out, uint64_t offset, long scale, bool use_datetime, const string &dateformat) {
 	using namespace boost::posix_time;
 	if (use_datetime) {
-		if (dateformat == "unix") {
+		if (dateformat == "posix") {
 			time_t rawtime;
-			struct tm * timeinfo;
+			struct tm timeinfo;
 
 			time (&rawtime);
-			timeinfo = localtime (&rawtime);
-			return out << asctime(timeinfo);
+			localtime_r(&rawtime, &timeinfo);
+			char buf[40];
+      asctime_r(&timeinfo, buf);
+      size_t n = strlen(buf);
+      if (n>1 && buf[n-1] == '\n') buf[n-1] = 0;
+			out << buf << " " << timeinfo.tm_zone;
 		}
 		else if (dateformat == "iso8601") {
 			ptime t = microsec_clock::universal_time();
-			return out << to_iso_extended_string(t) << "Z";
+			out << to_iso_string(t) << "Z";
 		}
+		else out << "unknown date format: " << dateformat;
 	}
 	else {
 		return out << offset / scale;
