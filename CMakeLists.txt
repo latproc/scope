@@ -21,7 +21,7 @@ configure_file (
   "${PROJECT_BINARY_DIR}/ScopeConfig.h"
 )
 
-FIND_PACKAGE(Boost COMPONENTS system thread program_options REQUIRED )
+FIND_PACKAGE(Boost COMPONENTS system thread program_options date_time REQUIRED )
 FIND_PACKAGE(ZeroMQ REQUIRED)
 
 set(HEADER_FILES 

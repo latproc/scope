@@ -20,6 +20,7 @@
 # ::
 #
 #   ZeroMQ_LIBRARY, where to find the ZeroMQ library.
+include(FindPackageHandleStandardArgs)
 
 find_path(ZeroMQ_INCLUDE_DIR zmq.h)
 

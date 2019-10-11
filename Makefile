@@ -10,7 +10,7 @@ build/Scope:	src/scope.cpp
 
 build/Filter:	src/filter.cpp
 
-build/Sample: src/sampler.cpp
+build/Sampler: src/sampler.cpp
 
 scope:	build/Scope src/scope.cpp
 	(cd build; cmake ..; make )
