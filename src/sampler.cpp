@@ -203,7 +203,7 @@ bool SamplerOptions::parseCommandLine(int argc, const char *argv[]) {
 						timestamp = true;
 		}
 	}
-    catch(exception& e) {
+    catch(const exception &e) {
         cerr << "error: " << e.what() << "\n";
         return false;
     }
@@ -253,7 +253,7 @@ CommandThread::CommandThread() : done(false), socket(*MessagingInterface::getCon
                 socket.bind (buf);
                 return;
 			}
-			catch (zmq::error_t err) {
+			catch (const zmq::error_t &err) {
 				if (--retries>0) {
 					std::cerr << "error binding to port.." << zmq_strerror(zmq_errno()) << "..trying again\n";
 					usleep(100000);
@@ -389,7 +389,7 @@ bool CommandStopMonitor::run(std::vector<Value> &params) {
 			return false;
 		}
 	}
-	catch(zmq::error_t err) {
+	catch(const zmq::error_t &err) {
 		std::cerr << zmq_strerror(errno) << "\n";
 		if (zmq_errno() == EFSM)
 		{FileLogger fl(program_name); fl.f() << zmq_strerror(errno)
@@ -479,7 +479,7 @@ void CommandThread::operator()() {
         cleanup:
             free(data);
         }
-        catch (std::exception e) {
+        catch (const std::exception &e) {
 			if (errno) std::cerr << "error during client communication: " << strerror(errno) << "\n" << std::flush;
             if (zmq_errno())
                 std::cerr << zmq_strerror(zmq_errno()) << "\n" << std::flush;
@@ -655,7 +655,7 @@ int main(int argc, const char * argv[])
 					current_channel = subscription_manager.current_channel;
 				retry_count = 3;
 			}
-			catch(zmq::error_t err) {
+			catch(const zmq::error_t &err) {
 				std::cerr << zmq_strerror(errno) << "\n";
 				if (zmq_errno() == EFSM) {
 					retry_count--;
@@ -698,7 +698,10 @@ int main(int argc, const char * argv[])
 				string machine, property, op, state;
 				Value val(SymbolTable::Null);
 				if (MessageEncoding::getCommand(data, op, &message)) {
-					if (op == "STATE" && message->size() == 2) {
+					if (message == nullptr) {
+						std::cerr << "unexpected empty parameter list for recieved message: " << op << "\n";
+					}
+					else if (op == "STATE" && message->size() == 2) {
 						machine = message->front().asString();
 						message->pop_front();
 						state = message->front().asString();
@@ -724,7 +727,6 @@ int main(int argc, const char * argv[])
 						}
 					}
 					else if (op == "UPDATE") {
-
 						output << (mh.start_time - first_message_time)/scale; 
 						std::list<Value>::iterator iter = message->begin();
 						while (iter!= message->end()) {
@@ -770,30 +772,33 @@ int main(int argc, const char * argv[])
 							if (options.emitTimestamp()) output << "\"";
 						}
 					}
+					else {
+						std::cerr << "unexpected message " << op << " with " << (message != nullptr ? message->size() : 0) << " paramters\n";
+					}
+					delete message;
 				}
 				else {
 					struct timeval now;
 					gettimeofday(&now, 0);
 					istringstream iss(data);
 					std::string machine;
-		            iss >> machine >> op;
+					iss >> machine >> op;
 					if (op == "STATE") {					
-		                iss >> state;
+						iss >> state;
 						int state_num = lookupState(state);
 						map<string, int>::iterator idx = device_map.find(machine);
 						if (idx == device_map.end()) //new machine
 							device_map[machine] = next_device_num++;
-				
+
 						output << get_diff_in_microsecs(&now, &start)/scale
 							<< "\t" << machine << "\t" << state << "\t" << state_num;
-		            }
+					}
 					else if (op == "VALUE" && !options.ignoreValues()) {
 						property = machine;
 						map<string, int>::iterator idx = device_map.find(property);
 						if (idx == device_map.end()) //new machine
 							device_map[property] = next_device_num++;
 
-	
 						if (options.onlyNumericValues()) {
 							long val;
 							if (outputNumeric(output, iss, val)) 
@@ -815,18 +820,17 @@ int main(int argc, const char * argv[])
 					mif->send(output.str().c_str());
 				}
 			}
-			delete data;
-        }
-        catch(exception& e) {
-            cerr << "error: " << e.what() << "\n";
-        }
-        catch(...) {
-            cerr << "Exception of unknown type!\n";
-        }
-    }
-    cmdline.stop();
-    cmd_interface.join();
+			delete[] data;
+			}
+			catch(const exception &e) {
+					cerr << "error: " << e.what() << "\n";
+			}
+			catch(...) {
+					cerr << "Exception of unknown type!\n";
+			}
+	}
+	cmdline.stop();
+	cmd_interface.join();
 
-    return 0;
+	return 0;
 }
-
