@@ -4,10 +4,6 @@ project (Scope)
 set (Scope_VERSION_MAJOR 0)
 set (Scope_VERSION_MINOR 8)
 
-if (EXISTS "${PROJECT_SOURCE_DIR}/LocalCMakeLists.txt")
-	include("${PROJECT_SOURCE_DIR}/LocalCMakeLists.txt")
-endif()
-
 set (CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR})
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${PROJECT_SOURCE_DIR}/cmake/Modules/")
 
@@ -15,6 +11,10 @@ set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${PROJECT_SOURCE_DIR}/cmake/Modules/
 set (CMAKE_CXX_FLAGS "-g -Wall --std=c++11")
 
 set (CLOCKWORK_DIR ${PROJECT_SOURCE_DIR}/../latproc/iod/src/)
+
+if (EXISTS "${PROJECT_SOURCE_DIR}/LocalCMakeLists.txt")
+	include("${PROJECT_SOURCE_DIR}/LocalCMakeLists.txt")
+endif()
 
 configure_file (
   "${PROJECT_SOURCE_DIR}/ScopeConfig.h.in"
