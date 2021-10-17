@@ -7,7 +7,7 @@
   modify it under the terms of the GNU General Public License
   as published by the Free Software Foundation; either version 2
   of the License, or (at your option) any later version.
-  
+
   Latproc is distributed in the hope that it will be useful,
   but WITHOUT ANY WARRANTY; without even the implied warranty of
   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
@@ -23,9 +23,9 @@
 the received data on stdout with the addition of a timestamp indicating when
 the message was received.
 
-Devices are mapped to a unique integer that is displayed or republished 
+Devices are mapped to a unique integer that is displayed or republished
 instead of the device name. A second channel is used to transmit new machine names
-as they are discovered. A command channel can be used to request that all 
+as they are discovered. A command channel can be used to request that all
 device names are resent.
 
 */
@@ -113,7 +113,7 @@ class SamplerOptions {
 	string date_format;
 
     SamplerOptions() : subscribe_to_port(5556), subscribe_to_host("localhost"),
-        publish_to_port(5560), publish_to_interface("*"), 
+        publish_to_port(5560), publish_to_interface("*"),
 		republish(false), quiet(false), raw(false), ignore_values(false), only_numeric_values(false),
 		use_millis(true), channel_name("SAMPLER_CHANNEL"), cw_port(5555), debug_flag(false),
 		user_start_time(0), timestamp(false), output_format("std"), date_format("iso8601")
@@ -137,7 +137,7 @@ class SamplerOptions {
 	int clockworkPort() { return cw_port; }
 	static bool debug() { return instance()->debug_flag; }
 	void parseStartTime ( uint64_t st) {
-		
+
 	}
 	uint64_t userStartTime() { return user_start_time; }
 	bool emitTimestamp() { return timestamp; }
@@ -169,22 +169,22 @@ bool SamplerOptions::parseCommandLine(int argc, const char *argv[]) {
 		("format", po::value<string>(), "select output format (std, kv, kvq)")
 		("date-format", po::value<string>(), "timestamp format (posix, iso8601) (implies --timestamp)")
         ;
-        po::variables_map vm;        
+        po::variables_map vm;
         po::store(po::parse_command_line(argc, argv, desc), vm);
-        po::notify(vm);    
+        po::notify(vm);
         if (vm.count("help")) {
             cerr << desc << "\n";
             return false;
         }
-		if (vm.count("republish")) 
+		if (vm.count("republish"))
 			republish = true;
-		if (vm.count("subscribe")) 
+		if (vm.count("subscribe"))
 			subscribe_to_host = vm["subscribe"].as<string>();
-		if (vm.count("interface")) 
+		if (vm.count("interface"))
 			publish_to_interface = vm["interface"].as<string>();
-		if (vm.count("subscribe-port")) 
+		if (vm.count("subscribe-port"))
 			subscribe_to_port = vm["subscribe-port"].as<int>();
-		if (vm.count("publish-port")) 
+		if (vm.count("publish-port"))
 			publish_to_port = vm["publish-port"].as<int>();
 		if (vm.count("quiet")) quiet = true;
 		if (vm.count("raw")) raw = true;
@@ -230,12 +230,12 @@ public:
     bool done;
     const char *error() { return error_str.c_str(); }
     const char *result() { return result_str.c_str(); }
-    
+
 	bool operator()(std::vector<Value> &params) {
 		done = run(params);
 		return done;
 	}
-    
+
 protected:
 	virtual bool run(std::vector<Value> &params) = 0;
 	std::string error_str;
@@ -311,7 +311,7 @@ bool CommandMonitor::run(std::vector<Value> &params) {
 		const char *pat = raw_pat;
 		if (*raw_pat == '"') ++pat;
 		if (*pat && pat[strlen(pat)-1] == '"') raw_pat[strlen(raw_pat)-1] = 0;
-		snprintf(buf, 1000, "CHANNEL %s ADD MONITOR PATTERN %s", 
+		snprintf(buf, 1000, "CHANNEL %s ADD MONITOR PATTERN %s",
 			current_channel.c_str(), pat);
 		free(raw_pat);
 	}
@@ -320,8 +320,8 @@ bool CommandMonitor::run(std::vector<Value> &params) {
                  current_channel.c_str(), params[2].asString().c_str(), params[3].asString().c_str());
 	}
 	else if (params.size() == 2) {
-		snprintf(buf, 1000, "CHANNEL %s ADD MONITOR %s", 
-			current_channel.c_str(), params[1].asString().c_str());		
+		snprintf(buf, 1000, "CHANNEL %s ADD MONITOR %s",
+			current_channel.c_str(), params[1].asString().c_str());
 	}
 	else {
 		error_str = "usage: MONITOR machine_name | MONITOR PATTERN pattern";
@@ -360,11 +360,11 @@ bool CommandStopMonitor::run(std::vector<Value> &params) {
 		const char *pat = raw_pat;
 		if (*raw_pat == '"') ++pat;
 		if (*pat && pat[strlen(pat)-1] == '"') raw_pat[strlen(raw_pat)-1] = 0;
-		snprintf(buf, 1000, "CHANNEL %s REMOVE MONITOR PATTERN %s", 
+		snprintf(buf, 100, "CHANNEL %s REMOVE MONITOR PATTERN %s",
 			current_channel.c_str(), params[2].asString().c_str());
 	}
 	else if (params.size() == 2) {
-		snprintf(buf, 100, "CHANNEL %s REMOVE MONITOR %s", 
+		snprintf(buf, 100, "CHANNEL %s REMOVE MONITOR %s",
 			current_channel.c_str(), params[1].asString().c_str());
 	}
 	else {
@@ -429,7 +429,7 @@ void CommandThread::operator()() {
 
             std::list<Value> *parts = 0;
 
-			// read the command, attempt to read a structured form first, 
+			// read the command, attempt to read a structured form first,
 			// and try a simple form if that fails
 			std::string cmd;
 			if (!MessageEncoding::getCommand(data, cmd, &parts)) {
@@ -441,7 +441,7 @@ void CommandThread::operator()() {
 	                ++count;
 	            }
 			}
-			
+
             std::vector<Value> params(0);
 			params.push_back(cmd.c_str());
 			if (parts)
@@ -494,7 +494,7 @@ void CommandThread::operator()() {
 }
 
 int outputNumeric(std::ostream &out, std::istream &in, long &val) {
-	// convert the input to an integer value and output the name and value if 
+	// convert the input to an integer value and output the name and value if
 	// the conversion is successful
 	string s_value;
     in >> s_value;
@@ -606,30 +606,30 @@ int main(int argc, const char * argv[])
 	MessagingInterface::setContext(&context);
 	SamplerOptions &options = *SamplerOptions::instance();
 	if (!options.parseCommandLine(argc, argv)) return 1;
-	
+
 	if (options.quietMode() && !options.publish())
 		cerr << "Warning: not writing to stdout or zmq\n";
-//	if (options.debug()) 
+//	if (options.debug())
 //		LogState::instance()->insert(DebugExtra::instance()->DEBUG_CHANNELS);
 
 	MessagingInterface *mif = 0;
 	if (options.publish())
 	 	mif = MessagingInterface::create("*", options.publisherPort());
-	
+
 	atexit(save_devices);
 	atexit(save_state_names);
 	signal(SIGINT, interrupt_handler);
 	signal(SIGTERM, interrupt_handler);
-	
+
 	// this should be a separate thread
     if (SamplerOptions::debug()) std::cerr << "-------- Starting Command Interface ---------\n";
     CommandThread cmdline;
     boost::thread cmd_interface(boost::ref(cmdline));
-    
+
     zmq::socket_t cmd(*MessagingInterface::getContext(), ZMQ_REP);
     cmd.bind("inproc://remote_commands");
-    
-    SubscriptionManager subscription_manager(options.channel().c_str(), eCLOCKWORK, 
+
+    SubscriptionManager subscription_manager(options.channel().c_str(), eCLOCKWORK,
 			options.subscriberHost().c_str(), options.subscriberPort());
 	subscription_manager.configureSetupConnection(
 				options.subscriberHost().c_str(), options.clockworkPort());
@@ -666,7 +666,7 @@ int main(int argc, const char * argv[])
 			}
 			if ( !(items[1].revents & ZMQ_POLLIN) || (items[1].revents & ZMQ_POLLERR) )
 					continue;
-            
+
 			try {
 #if 0
 			zmq::message_t update;
@@ -684,11 +684,11 @@ int main(int argc, const char * argv[])
 			}
 			if (first_message_time == 0) first_message_time = mh.start_time;
 #endif
- 
+
 			long scale = 1;
 			if (options.reportMillis()) scale = 1000;
 
-			output.str("");	
+			output.str("");
 			output.clear();
 			if (options.rawMode()) {
 				output << data;
@@ -718,8 +718,8 @@ int main(int argc, const char * argv[])
 							timestamp(output, mh.start_time - first_message_time, scale, options.emitTimestamp(), options.dateFormat());
 						}
 						else if (options.format() == "kvq") {
-							output << "\"machine\": \"" 
-								<< machine << "\", \"state\": \"" 
+							output << "\"machine\": \""
+								<< machine << "\", \"state\": \""
 								<< state << "\", \"timestamp\": ";
 							if (options.emitTimestamp()) output << "\"";
 							timestamp(output, mh.start_time - first_message_time, scale, options.emitTimestamp(), options.dateFormat());
@@ -727,7 +727,7 @@ int main(int argc, const char * argv[])
 						}
 					}
 					else if (op == "UPDATE") {
-						output << (mh.start_time - first_message_time)/scale; 
+						output << (mh.start_time - first_message_time)/scale;
 						std::list<Value>::iterator iter = message->begin();
 						while (iter!= message->end()) {
 							const Value &v =  *iter++;
@@ -764,7 +764,7 @@ int main(int argc, const char * argv[])
 							timestamp(output, mh.start_time - first_message_time, scale, options.emitTimestamp(), options.dateFormat());
 						}
 						else if (options.format() == "kvq") {
-							output << "\"machine\": \"" 
+							output << "\"machine\": \""
 								<< machine << "\", \"" << prop << "\": "
 								<< value_str << ", \"timestamp\": ";
 							if (options.emitTimestamp()) output << "\"";
@@ -783,7 +783,7 @@ int main(int argc, const char * argv[])
 					istringstream iss(data);
 					std::string machine;
 					iss >> machine >> op;
-					if (op == "STATE") {					
+					if (op == "STATE") {
 						iss >> state;
 						int state_num = lookupState(state);
 						map<string, int>::iterator idx = device_map.find(machine);
@@ -801,7 +801,7 @@ int main(int argc, const char * argv[])
 
 						if (options.onlyNumericValues()) {
 							long val;
-							if (outputNumeric(output, iss, val)) 
+							if (outputNumeric(output, iss, val))
 								output << get_diff_in_microsecs(&now, &start) /scale
 								<< "\t" << property << "\tvalue\t" << val;
 						}
@@ -814,7 +814,7 @@ int main(int argc, const char * argv[])
 				}
 			}
 			if (!output.str().empty()) {
-				if (!options.quietMode()) 
+				if (!options.quietMode())
 					cout << output.str() << "\n" << flush;
 				if (options.publish()) {
 					mif->send(output.str().c_str());
