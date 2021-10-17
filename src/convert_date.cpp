@@ -13,8 +13,8 @@ void display(tm &time, int frac_sec)
 	localtime_r(&local_time, &time);
 
 	std::cout << (time.tm_year + 1900) << "-" << (time.tm_mon + 1) << "-"
-			<< time.tm_mday << " " << time.tm_hour << ":" << time.tm_min << ":"
-			<< time.tm_sec;
+	        << time.tm_mday << " " << time.tm_hour << ":" << time.tm_min << ":"
+	        << time.tm_sec;
 	if (frac_sec) {
 		std::cout << '.' << frac_sec;
 	}
@@ -30,11 +30,11 @@ Term parse_8601_datetime(const std::string &input, DateTime &result)
 {
 	try {
 		tm time = {.tm_year = 0,
-				   .tm_mon = 0,
-				   .tm_mday = 0,
-				   .tm_hour = 0,
-				   .tm_min = 0,
-				   .tm_sec = 0
+		           .tm_mon = 0,
+		           .tm_mday = 0,
+		           .tm_hour = 0,
+		           .tm_min = 0,
+		           .tm_sec = 0
 		   };
 		int frac_sec = 0;
 		const char *p = input.c_str();
