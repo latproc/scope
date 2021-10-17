@@ -1,5 +1,7 @@
 # setup and run cmake
 
+SRC_DIR=src
+
 all:	build sampler filter scope build/convert_date
 
 build:
@@ -30,6 +32,9 @@ filter:	build/Filter src/filter.cpp
 sampler:	build/Sampler src/sampler.cpp
 	(cd build; cmake ..; make )
 	cp build/Sampler sampler
+
+style:
+	astyle --options=.astylerc $(SRC_DIR)/*.cpp,*.h
 
 clean:
 	rm -f sampler filter scope
