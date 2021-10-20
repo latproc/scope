@@ -29,22 +29,22 @@ int main(int argc, char *argv[])
 		}
 	}
 
-	char buf[1000];
-
 	while (!std::cin.eof()) {
-		while (std::cin.getline(buf, 1000, '\n')) {
+		std::string buf;
+		while (std::getline(std::cin, buf)) {
 			if (fix_time) {
 				DateTime dt;
 				auto error = parse_8601_datetime(buf, dt);
 				if (error == none) {
-					char updated[1000];
+					size_t buflen = buf.length() + 10;
+					char updated[buflen];
 					time_t local_time = timegm(&dt.datetime);
 					localtime_r(&local_time, &dt.datetime);
 					const auto &t = dt.datetime;
-					snprintf(updated, 1000, "%04d-%02d-%02d %02d:%02d:%02d.%06d", t.tm_year + 1900, t.tm_mon + 1, t.tm_mday, t.tm_hour, t.tm_min, t.tm_sec, dt.frac_sec);
+					snprintf(updated, buflen, "%04d-%02d-%02d %02d:%02d:%02d.%06d", t.tm_year + 1900, t.tm_mon + 1, t.tm_mday, t.tm_hour, t.tm_min, t.tm_sec, dt.frac_sec);
 					int len = strlen(updated);
-					snprintf(updated + len, 1000 - len, "%s", strchr(buf, '\t'));
-					strncpy(buf, updated, 1000);
+					snprintf(updated + len, buflen - len, "%s", strchr(buf.c_str(), '\t'));
+					buf = updated;
 				}
 			}
 
@@ -52,7 +52,7 @@ int main(int argc, char *argv[])
 				std::list<rexp_info *>::iterator iter = patterns.begin();
 				while (iter != patterns.end()) {
 					rexp_info *info = *iter++;
-					if (execute_pattern(info, buf) == 0) {
+					if (execute_pattern(info, buf.c_str()) == 0) {
 						std::cout << buf << "\n" << std::flush;
 						break;
 					}
