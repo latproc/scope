@@ -29,13 +29,13 @@ void display(DateTime &datetime)
 Term parse_8601_datetime(const std::string &input, DateTime &result)
 {
 	try {
-		tm time = {.tm_year = 0,
-		           .tm_mon = 0,
-		           .tm_mday = 0,
-		           .tm_hour = 0,
-		           .tm_min = 0,
-		           .tm_sec = 0
-		   };
+		tm time;
+		time.tm_year = 0;
+		time.tm_mon = 0;
+		time.tm_mday = 0;
+		time.tm_hour = 0;
+		time.tm_min = 0;
+		time.tm_sec = 0;
 		int frac_sec = 0;
 		const char *p = input.c_str();
 		const char *q = p;
