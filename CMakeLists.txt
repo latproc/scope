@@ -37,6 +37,7 @@ set(HEADER_FILES
     ${CLOCKWORK_DIR}/cJSON.h
     ${CLOCKWORK_DIR}/DebugExtra.h
     ${CLOCKWORK_DIR}/value.h
+    ${CLOCKWORK_DIR}/clock.h
     ${CLOCKWORK_DIR}/symboltable.h
     ${CLOCKWORK_DIR}/options.h
     ${CLOCKWORK_DIR}/rate.h
@@ -56,6 +57,7 @@ add_library (Clockwork
     ${CLOCKWORK_DIR}/cJSON.c
     ${CLOCKWORK_DIR}/DebugExtra.cpp
     ${CLOCKWORK_DIR}/value.cpp
+    ${CLOCKWORK_DIR}/clock.cpp
     ${CLOCKWORK_DIR}/symboltable.cpp
     ${CLOCKWORK_DIR}/options.cpp
     ${CLOCKWORK_DIR}/rate.cpp
