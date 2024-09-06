@@ -9,6 +9,12 @@ filter - reads stdin and applies regular expressions to determine those that are
 
 scope - reads machine state change events on stdin 
  and outputs a columnwise oscilloscope showing current state of each machine
+
+building
+--------
+
+git submodule update --init --recursive
+make
  
 sampler
 -------

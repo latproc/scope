@@ -11,7 +11,7 @@ set (CMAKE_EXPORT_COMPILE_COMMANDS true)
 
 set (CMAKE_CXX_FLAGS "-g -Wall --std=c++11")
 
-set (CLOCKWORK_DIR ${PROJECT_SOURCE_DIR}/../latproc/iod/src/)
+set (CLOCKWORK_DIR ${PROJECT_SOURCE_DIR}/clockwork/iod/src/)
 
 if (EXISTS "${PROJECT_SOURCE_DIR}/LocalCMakeLists.txt")
 	include("${PROJECT_SOURCE_DIR}/LocalCMakeLists.txt")
