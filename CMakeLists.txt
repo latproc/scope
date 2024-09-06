@@ -7,6 +7,7 @@ set (Scope_VERSION_MINOR 8)
 set (CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR})
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${PROJECT_SOURCE_DIR}/cmake/Modules/")
 
+set (CMAKE_EXPORT_COMPILE_COMMANDS true)
 
 set (CMAKE_CXX_FLAGS "-g -Wall --std=c++11")
 
@@ -42,6 +43,7 @@ set(HEADER_FILES
     ${CLOCKWORK_DIR}/options.h
     ${CLOCKWORK_DIR}/rate.h
     ${CLOCKWORK_DIR}/Message.h
+    ${CLOCKWORK_DIR}/clock.h
 	)
 
 add_library (Clockwork
@@ -62,6 +64,7 @@ add_library (Clockwork
     ${CLOCKWORK_DIR}/options.cpp
     ${CLOCKWORK_DIR}/rate.cpp
     ${CLOCKWORK_DIR}/Message.cpp
+    ${CLOCKWORK_DIR}/clock.cpp
 	${HEADER_FILES}
 )
 

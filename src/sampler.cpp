@@ -54,6 +54,7 @@
 #include <ScopeConfig.h>
 #include <MessageHeader.h>
 #include <boost/date_time/posix_time/posix_time.hpp>
+#include <map>
 
 using namespace std;
 
