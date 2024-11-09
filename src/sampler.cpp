@@ -513,7 +513,7 @@ void CommandThread::operator()()
 			}
 
 			std::vector<Value> params(0);
-			params.push_back(cmd.c_str());
+			params.push_back(Value{cmd});
 			if (parts) {
 				std::copy(parts->begin(), parts->end(), std::back_inserter(params));
 			}
