@@ -1,5 +1,7 @@
 cmake_minimum_required (VERSION 3.10)
-cmake_policy(SET CMP0167 OLD)
+if(POLICY CMP0167)
+    cmake_policy(SET CMP0167 OLD)
+endif()
 project (Scope)
 
 set (Scope_VERSION_MAJOR 0)
@@ -11,6 +13,7 @@ set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${PROJECT_SOURCE_DIR}/cmake/Modules/
 set (CMAKE_EXPORT_COMPILE_COMMANDS true)
 
 set (CMAKE_CXX_FLAGS "-g -Wall --std=c++11")
+add_compile_options(-Wno-deprecated-declarations)
 
 set (CLOCKWORK_DIR ${PROJECT_SOURCE_DIR}/clockwork/iod/src/)
 
