@@ -3,15 +3,47 @@
 #include <iostream>
 #include <string>
 #include <time.h>
+#include <iomanip>
+
+std::ostream &operator<<(std::ostream &out, const Term &term)
+{
+    switch (term) {
+        case none: out << "none"; break;
+        case year: out << "year"; break;
+        case monsep: out << "monsep"; break;
+        case mon: out << "mon"; break;
+        case daysep: out << "daysep"; break;
+        case day: out << "day"; break;
+        case timesep: out << "timesep"; break;
+        case hour: out << "hour"; break;
+        case minsep: out << "minsep"; break;
+        case min: out << "min"; break;
+        case secsep: out << "secsep"; break;
+        case secs: out << "secs"; break;
+        case fracsecs: out << "fracsecs"; break;
+        case zonesep: out << "zonesep"; break;
+        case zonehr: out << "zonehr"; break;
+        case zhmsep: out << "zhmsep"; break;
+        case zonemin: out << "zonemin"; break;
+    }
+    return out;
+}
 
 void display(tm &time, int frac_sec)
 {
     time_t local_time = timegm(&time);
     localtime_r(&local_time, &time);
 
-    std::cout << (time.tm_year + 1900) << "-" << (time.tm_mon + 1) << "-"
-            << time.tm_mday << " " << time.tm_hour << ":" << time.tm_min << ":"
-            << time.tm_sec;
+    std::cout << (time.tm_year + 1900) << "-"
+        << std::setw(2) << std::setfill('0') << (time.tm_mon + 1)
+        << "-"
+        << std::setw(2) << std::setfill('0') << time.tm_mday
+        << " "
+        << std::setw(2) << std::setfill('0') << time.tm_hour
+        << ":"
+        << std::setw(2) << std::setfill('0') << time.tm_min
+        << ":"
+        << std::setw(2) << std::setfill('0') << time.tm_sec;
     if (frac_sec) {
         std::cout << '.' << frac_sec;
     }
@@ -25,6 +57,11 @@ void display(DateTime &datetime)
 
 Term parse_8601_datetime(const std::string &input, DateTime &result)
 {
+    struct Error {
+        Term term;
+        char ch;
+    };
+        Error error = {none, '\0'};
     try {
         tm time;
         time.tm_year = 0;
@@ -39,70 +76,93 @@ Term parse_8601_datetime(const std::string &input, DateTime &result)
         auto append_to = [](int &field, const char *p) {
             field = field * 10 + *p - '0';
         };
+        char date_sep = '-';
+        char time_sep = ':';
+        auto skip = [&p]() { ++p; };
         Term state = year;
-        Term error = none;
         while (*p) {
             switch (state) {
                 case none:
                     break;
                 case year:
                     if (!isdigit(*p)) {
-                        error = state;
+                        error = {state, *p};
                         break;
                     }
                     append_to(time.tm_year, p);
                     if (p - q == 3) {
                         q = p;
-                        state = mon;
+                        state = monsep;
                     }
+                    break;
+                case monsep:
+                    state = mon;
+                    if (*p == date_sep) { skip(); q=p; continue; }
+                    q=p;
                     break;
                 case mon:
                     if (!isdigit(*p)) {
-                        error = state;
+                        error = {state, *p};
                         break;
                     }
                     append_to(time.tm_mon, p);
-                    if (p - q == 2) {
+                    if (p - q == 1) {
                         q = p;
-                        state = day;
+                        state = daysep;
                     }
+                    break;
+                case daysep:
+                    state = day;
+                    if (*p == date_sep) { skip(); q=p; continue; }
+                    q=p;
                     break;
                 case day:
                     if (!isdigit(*p)) {
-                        error = state;
+                        error= Error{state, *p};
                         break;
                     }
                     append_to(time.tm_mday, p);
-                    if (p - q == 2) {
+                    if (p - q == 1) {
                         q = p;
                         state = timesep;
                     }
                     break;
                 case timesep:
-                    q = p;
                     state = hour;
+                    if (*p == ' ' || *p == 'T') { skip(); q=p; continue; }
+                    q = p;
                     break;
                 case hour:
                     if (!isdigit(*p)) {
-                        error = state;
+                        error= Error{state, *p};
                         break;
                     }
                     append_to(time.tm_hour, p);
-                    if (p - q == 2) {
+                    if (p - q == 1) {
                         q = p;
-                        state = min;
+                        state = minsep;
                     }
+                    break;
+                case minsep:
+                    state = min;
+                    if (*p == time_sep) { skip(); q=p; continue; }
+                    q=p;
                     break;
                 case min:
                     if (!isdigit(*p)) {
-                        error = state;
+                        error= Error{state, *p};
                         break;
                     }
                     append_to(time.tm_min, p);
-                    if (p - q == 2) {
+                    if (p - q == 1) {
                         q = p;
-                        state = secs;
+                        state = secsep;
                     }
+                    break;
+                case secsep:
+                    state = secs;
+                    if (*p == time_sep) { skip(); q=p; break; }
+                    q=p;
                     break;
                 case secs:
                     if (!isdigit(*p)) {
@@ -115,7 +175,7 @@ Term parse_8601_datetime(const std::string &input, DateTime &result)
                             break;
                         }
                         else if (isdigit(*p) && p - q > 2) {
-                            error = state;
+                        error= Error{state, *p};
                             break;
                         }
                         else {
@@ -149,13 +209,13 @@ Term parse_8601_datetime(const std::string &input, DateTime &result)
                 case zonemin:
                     break;
             }
-            if (state == none || error != none) {
+            if (state == none || error.term != none) {
                 break;
             }
             ++p;
         };
-        if (error != none) {
-            return error;
+        if (error.term != none) {
+            throw std::runtime_error("Unexpected character '" + std::string(1, error.ch) + "' at term: " + std::to_string(error.term));
         }
         else if (!*p || state == none) {
             time.tm_year -= 1900;
@@ -165,7 +225,8 @@ Term parse_8601_datetime(const std::string &input, DateTime &result)
         }
     }
     catch (const std::exception &e) {
-        std::cout << "Error: " << e.what() << std::endl;
+        std::cerr << "Error: " << e.what() << std::endl;
+        return error.term;
     }
     return none;
 }
@@ -176,11 +237,12 @@ int main(int argc, char *argv[])
 
     for (int i = 1; i < argc; ++i) {
         DateTime dt;
-        if (parse_8601_datetime(argv[i], dt) == none) {
+        Term error;
+        if ((error = parse_8601_datetime(argv[i], dt)) == none) {
             display(dt);
         }
         else {
-            std::cerr << "Unexpected datetime format\n";
+            std::cerr << "Unexpected datetime format at term: " << error << "\n";
         }
     }
 
