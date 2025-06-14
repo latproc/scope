@@ -429,6 +429,7 @@ bool CommandStopMonitor::run(std::vector<Value> &params)
         }
         snprintf(buf, 100, "CHANNEL %s REMOVE MONITOR PATTERN %s",
                 current_channel.c_str(), params[2].asString().c_str());
+        free(raw_pat);
     }
     else if (params.size() == 2) {
         snprintf(buf, 100, "CHANNEL %s REMOVE MONITOR %s",
@@ -447,6 +448,7 @@ bool CommandStopMonitor::run(std::vector<Value> &params)
         sock.send(buf, strlen(buf));
         size_t len;
         int count = 0;
+
         while ((len = sock.recv(buf, 100)) == 0 && ++count < 3) ;
         if (len) {
             buf[len] = 0;
