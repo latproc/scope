@@ -18,7 +18,7 @@ build/Filter:	src/filter.cpp
 
 build/Sampler: src/sampler.cpp
 
-build/convert_date:	src/convert_date.cpp
+build/convert_date:	src/convert_date.cpp src/convert_date.h
 	(cd build; cmake ..; make )
 
 scope:	build/Scope src/scope.cpp
