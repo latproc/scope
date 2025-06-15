@@ -16,21 +16,24 @@ build/Scope:	src/scope.cpp
 
 build/Filter:	src/filter.cpp
 
-build/Sampler: src/sampler.cpp
+build/Sampler:	src/sampler.cpp
 
 build/convert_date:	src/convert_date.cpp src/convert_date.h
 	(cd build; cmake ..; make )
 
-scope:	build/Scope src/scope.cpp
+scope:	Makefile build/Scope src/scope.cpp
 	(cd build; cmake ..; make )
+	rm -f scope
 	cp build/Scope scope
 
-filter:	build/Filter src/filter.cpp
+filter:	Makefile build/Filter src/filter.cpp
 	(cd build; cmake ..; make )
+	rm -f filter
 	cp build/Filter filter
 
-sampler:	build/Sampler src/sampler.cpp
+sampler:	Makefile build/Sampler src/sampler.cpp
 	(cd build; cmake ..; make )
+	rm -f sampler
 	cp build/Sampler sampler
 
 style:
