@@ -1,44 +1,46 @@
-# setup and run cmake
+# Top-level build for Scope tools (sampler, filter, scope).
+# Builds only the clockwork client library (cw_client), not the full clockwork tree.
 
-SRC_DIR=src
+BUILD_DIR ?= build
+CMAKE ?= cmake
+CMAKE_BUILD_TYPE ?= Debug
 
-all:	build sampler filter scope build/convert_date
+.PHONY: all configure build sampler filter scope convert_date clean
 
-build:
-	mkdir build
-	(cd build; cmake ..; make )
+all: configure
+	$(MAKE) -C $(BUILD_DIR)
+	cp -f $(BUILD_DIR)/Sampler sampler
+	cp -f $(BUILD_DIR)/Filter filter
+	cp -f $(BUILD_DIR)/Scope scope
 
-xcode:
-	[ -d "xcode" ] || mkdir xcode
-	cd xcode && cmake -G Xcode .. && xcodebuild -parallelizeTargets -jobs 6
+configure: $(BUILD_DIR)/Makefile
 
-build/Scope:	src/scope.cpp
+$(BUILD_DIR)/Makefile: CMakeLists.txt ScopeConfig.h.in cmake/Modules/FindZeroMQ.cmake
+	mkdir -p $(BUILD_DIR)
+	cd $(BUILD_DIR) && $(CMAKE) -DCMAKE_BUILD_TYPE=$(CMAKE_BUILD_TYPE) ..
 
-build/Filter:	src/filter.cpp
+# Rebuild everything already configured
+build: $(BUILD_DIR)/Makefile
+	$(MAKE) -C $(BUILD_DIR)
 
-build/Sampler:	src/sampler.cpp
+sampler: $(BUILD_DIR)/Makefile
+	$(MAKE) -C $(BUILD_DIR) Sampler
+	cp -f $(BUILD_DIR)/Sampler sampler
 
-build/convert_date:	src/convert_date.cpp src/convert_date.h
-	(cd build; cmake ..; make )
+filter: $(BUILD_DIR)/Makefile
+	$(MAKE) -C $(BUILD_DIR) Filter
+	cp -f $(BUILD_DIR)/Filter filter
 
-scope:	Makefile build/Scope src/scope.cpp
-	(cd build; cmake ..; make )
-	rm -f scope
-	cp build/Scope scope
+scope: $(BUILD_DIR)/Makefile
+	$(MAKE) -C $(BUILD_DIR) Scope
+	cp -f $(BUILD_DIR)/Scope scope
 
-filter:	Makefile build/Filter src/filter.cpp
-	(cd build; cmake ..; make )
-	rm -f filter
-	cp build/Filter filter
-
-sampler:	Makefile build/Sampler src/sampler.cpp
-	(cd build; cmake ..; make )
-	rm -f sampler
-	cp build/Sampler sampler
+convert_date: $(BUILD_DIR)/Makefile
+	$(MAKE) -C $(BUILD_DIR) convert_date
 
 style:
-	astyle --options=.astylerc $(SRC_DIR)/*.cpp,*.h
+	astyle --options=.astylerc src/*.cpp src/*.h
 
 clean:
 	rm -f sampler filter scope
-	rm -rf build
+	rm -rf $(BUILD_DIR)

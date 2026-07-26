@@ -15,7 +15,11 @@ building
 
 git submodule update --init --recursive
 make
- 
+
+This builds sampler, filter, and scope against the clockwork **client
+library** (`cw_client`) sources in the submodule only — not the full
+clockwork tree (iod, interpreter, ethercat, etc.).
+
 sampler
 -------
 
