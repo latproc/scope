@@ -17,7 +17,8 @@ add_compile_options(-Wno-deprecated-declarations)
 
 # Client library sources live in the clockwork submodule. We build only
 # cw_client (not iod/cw/ethercat or the rest of clockwork). Keep this list
-# aligned with clockwork/iod/CMakeLists.txt target cw_client.
+# aligned with clockwork line C (prod-client-zmq-fix) iod/CMakeLists.txt
+# target cw_client — process.cpp stays out (Boost.Context fiber).
 set (CLOCKWORK_DIR ${PROJECT_SOURCE_DIR}/clockwork/iod/src)
 
 if (EXISTS "${PROJECT_SOURCE_DIR}/LocalCMakeLists.txt")
@@ -29,8 +30,11 @@ configure_file (
   "${PROJECT_BINARY_DIR}/ScopeConfig.h"
 )
 
-# context is required by process.cpp in cw_client
-FIND_PACKAGE(Boost COMPONENTS system thread program_options date_time context REQUIRED)
+# context optional: cw_client no longer needs boost::context::fiber
+FIND_PACKAGE(Boost COMPONENTS system thread program_options date_time context)
+if (NOT Boost_FOUND)
+    FIND_PACKAGE(Boost COMPONENTS system thread program_options date_time REQUIRED)
+endif()
 FIND_PACKAGE(ZeroMQ REQUIRED)
 
 set(CW_CLIENT_HEADERS
@@ -57,12 +61,11 @@ set(CW_CLIENT_HEADERS
     ${CLOCKWORK_DIR}/Receiver.h
     ${CLOCKWORK_DIR}/json_expr_parser.h
     ${CLOCKWORK_DIR}/json_expression.h
-    ${CLOCKWORK_DIR}/process.h
     ${CLOCKWORK_DIR}/ThreadSafeQueue.h
     ${CLOCKWORK_DIR}/ThreadSafeList.h
 )
 
-# Static client library only — same sources as clockwork's cw_client target
+# Static client library only — same sources as clockwork's cw_client target (line C)
 add_library (cw_client
     ${CLOCKWORK_DIR}/MessagingInterface.cpp
     ${CLOCKWORK_DIR}/MessageLog.cpp
@@ -86,7 +89,6 @@ add_library (cw_client
     ${CLOCKWORK_DIR}/watchdog.cpp
     ${CLOCKWORK_DIR}/json_expr_parser.cpp
     ${CLOCKWORK_DIR}/json_expression.cpp
-    ${CLOCKWORK_DIR}/process.cpp
     ${CW_CLIENT_HEADERS}
 )
 
