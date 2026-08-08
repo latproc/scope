@@ -14,6 +14,7 @@ building
 --------
 
 git submodule update --init --recursive
+make -C clockwork/iod client-install
 make
 
 This builds sampler, filter, and scope against the clockwork **client
@@ -47,4 +48,3 @@ On the data collection host:
 
 Note the use of '--raw' on the collection host. This is to prevent the 
 collection host from trying to interpret the data again.
-

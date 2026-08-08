@@ -3,6 +3,7 @@
 *.dSYM/
 *.dat
 build/
+stage/
 filter
 sampler
 scope
