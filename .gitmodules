@@ -1,4 +1,0 @@
-[submodule "clockwork"]
-	path = clockwork
-	url = https://github.com/latproc/clockwork
-	branch = prod-client-zmq-fix
