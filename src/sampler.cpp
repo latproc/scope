@@ -614,7 +614,7 @@ std::string outputRemaining(std::ostream &out, std::istream &in)
 
     std::string res(rbuf);
     if (size >= 25) {
-        delete rbuf;
+        delete[] rbuf;
     }
     return res;
 }
@@ -801,6 +801,7 @@ int main(int argc, const char *argv[])
             size_t len = 0;
             if (!safeRecv(subscription_manager.subscriber(), &data, &len, false, 1, mh)) {
                 std::cout << "failed to receive message\n";
+                continue;
             }
             if (first_message_time == 0) {
                 first_message_time = mh.start_time;
@@ -855,7 +856,7 @@ int main(int argc, const char *argv[])
                             }
                         }
                     }
-                    else if (op == "UPDATE") {
+                    else if (op == "UPDATE" && message != nullptr) {
                         output << (mh.start_time - first_message_time) / scale;
                         std::list<Value>::iterator iter = message->begin();
                         while (iter != message->end()) {
