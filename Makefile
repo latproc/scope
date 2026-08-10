@@ -5,7 +5,7 @@ BUILD_DIR ?= build
 CMAKE ?= cmake
 CMAKE_BUILD_TYPE ?= Debug
 
-.PHONY: all configure build sampler filter scope convert_date clean
+.PHONY: all configure build sampler filter scope convert_date clockwork-client clean
 
 all: configure
 	$(MAKE) -C $(BUILD_DIR)
@@ -15,23 +15,26 @@ all: configure
 
 configure: $(BUILD_DIR)/Makefile
 
-$(BUILD_DIR)/Makefile: CMakeLists.txt ScopeConfig.h.in cmake/Modules/FindZeroMQ.cmake
+$(BUILD_DIR)/Makefile: CMakeLists.txt ScopeConfig.h.in cmake/Modules/FindZeroMQ.cmake cmake/Modules/FindClockworkClient.cmake | clockwork-client
 	mkdir -p $(BUILD_DIR)
 	cd $(BUILD_DIR) && $(CMAKE) -DCMAKE_BUILD_TYPE=$(CMAKE_BUILD_TYPE) ..
 
+clockwork-client:
+	$(MAKE) -C clockwork client-install
+
 # Rebuild everything already configured
-build: $(BUILD_DIR)/Makefile
+build: clockwork-client $(BUILD_DIR)/Makefile
 	$(MAKE) -C $(BUILD_DIR)
 
-sampler: $(BUILD_DIR)/Makefile
+sampler: clockwork-client $(BUILD_DIR)/Makefile
 	$(MAKE) -C $(BUILD_DIR) Sampler
 	cp -f $(BUILD_DIR)/Sampler sampler
 
-filter: $(BUILD_DIR)/Makefile
+filter: clockwork-client $(BUILD_DIR)/Makefile
 	$(MAKE) -C $(BUILD_DIR) Filter
 	cp -f $(BUILD_DIR)/Filter filter
 
-scope: $(BUILD_DIR)/Makefile
+scope: clockwork-client $(BUILD_DIR)/Makefile
 	$(MAKE) -C $(BUILD_DIR) Scope
 	cp -f $(BUILD_DIR)/Scope scope
 
