@@ -54,6 +54,7 @@
 #include <boost/date_time/posix_time/posix_time.hpp>
 #include <map>
 #include <time.h>
+#include <stdint.h>
 
 using namespace std;
 
@@ -115,12 +116,15 @@ class SamplerOptions {
         bool timestamp;
         string output_format;
         string date_format;
+        uint32_t channel_timeout_limit;
+        uint64_t data_age_seconds;
 
         SamplerOptions() : subscribe_to_port(5556), subscribe_to_host("localhost"),
             publish_to_port(5560), publish_to_interface("*"),
             republish(false), quiet(false), raw(false), ignore_values(false), only_numeric_values(false),
             use_millis(true), channel_name("SAMPLER_CHANNEL"), cw_port(5555), debug_flag(false),
-            user_start_time(0), timestamp(false), output_format("std"), date_format("iso8601")
+            user_start_time(0), timestamp(false), output_format("std"), date_format("iso8601"),
+            channel_timeout_limit(10), data_age_seconds(900)
         {}
     public:
         static SamplerOptions *instance() { if (!_instance) _instance = new SamplerOptions(); return _instance; }
@@ -147,6 +151,8 @@ class SamplerOptions {
         bool emitTimestamp() { return timestamp; }
         const std::string &format() { return output_format; }
         const std::string &dateFormat() { return date_format; }
+        uint32_t channelTimeoutLimit() const { return channel_timeout_limit; }
+        uint64_t dataAgeSeconds() const { return data_age_seconds; }
 };
 
 bool SamplerOptions::parseCommandLine(int argc, const char *argv[])
@@ -173,6 +179,10 @@ bool SamplerOptions::parseCommandLine(int argc, const char *argv[])
         ("start", po::value<string>(), "start time for time deltas")
         ("format", po::value<string>(), "select output format (std, kv, kvq)")
         ("date-format", po::value<string>(), "timestamp format (posix, iso8601) (implies --timestamp)")
+        ("channel-timeouts", po::value<uint32_t>(),
+         "exit after this many consecutive CHANNEL response timeouts [10]; 0 disables")
+        ("data-age-seconds", po::value<uint64_t>(),
+         "exit if no sample arrives for this many seconds [900]; 0 disables")
         ;
         po::variables_map vm;
         po::store(po::parse_command_line(argc, argv, desc), vm);
@@ -247,6 +257,12 @@ bool SamplerOptions::parseCommandLine(int argc, const char *argv[])
                 cerr << "valid formats are: posix, iso8601\n";
                 return false;
             }
+        }
+        if (vm.count("channel-timeouts")) {
+            channel_timeout_limit = vm["channel-timeouts"].as<uint32_t>();
+        }
+        if (vm.count("data-age-seconds")) {
+            data_age_seconds = vm["data-age-seconds"].as<uint64_t>();
         }
     }
     catch (const exception &e) {
@@ -753,7 +769,11 @@ int main(int argc, const char *argv[])
     gettimeofday(&start, 0);
     uint64_t first_message_time = options.userStartTime(); // can be initialised on the commandline
     stringstream output;
-    unsigned int retry_count = 3;
+    // Age is local receive time. A quiet but granted channel still counts, so a
+    // half-open subscription cannot sit up for hours the way a hung handshake did.
+    uint64_t last_sample_us = microsecs();
+    const uint32_t timeout_limit = options.channelTimeoutLimit();
+    const uint64_t data_age_us = options.dataAgeSeconds() * 1000000ULL;
     for (;;) {
         zmq::pollitem_t items[] = {
             { subscription_manager.setup(), 0, ZMQ_POLLERR | ZMQ_POLLIN, 0 },
@@ -765,23 +785,30 @@ int main(int argc, const char *argv[])
                 current_channel = "";
                 usleep(100000);
                 gettimeofday(&start, 0);
-                continue;
             }
-            if (current_channel.length() == 0) {
+            else if (current_channel.length() == 0) {
                 current_channel = subscription_manager.current_channel;
             }
-            retry_count = 3;
         }
         catch (const zmq::error_t &err) {
-            std::cerr << zmq_strerror(errno) << "\n";
-            if (zmq_errno() == EFSM) {
-                retry_count--;
-                exit(0);
-            }
-            if (retry_count == 0) {
-                exit(1);
-            }
-            continue;
+            std::cerr << zmq_strerror(zmq_errno()) << "\n";
+            usleep(100000);
+        }
+        if (timeout_limit > 0 &&
+            subscription_manager.channelRequestTimeouts() >= timeout_limit) {
+            std::cerr << program_name << " channel watchdog: "
+                      << subscription_manager.channelRequestTimeouts()
+                      << " consecutive " << options.channel()
+                      << " response timeouts — exiting so the supervisor can restart\n"
+                      << std::flush;
+            exit(2);
+        }
+        if (data_age_us > 0 && microsecs() - last_sample_us > data_age_us) {
+            std::cerr << program_name << " channel watchdog: no sample for "
+                      << options.dataAgeSeconds()
+                      << "s — exiting so the supervisor can restart\n"
+                      << std::flush;
+            exit(2);
         }
         if (!(items[1].revents & ZMQ_POLLIN) || (items[1].revents & ZMQ_POLLERR)) {
             continue;
@@ -803,6 +830,8 @@ int main(int argc, const char *argv[])
                 std::cout << "failed to receive message\n";
                 continue;
             }
+            last_sample_us = microsecs();
+            subscription_manager.noteSubscriberData();
             if (first_message_time == 0) {
                 first_message_time = mh.start_time;
             }

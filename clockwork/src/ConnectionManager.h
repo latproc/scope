@@ -14,6 +14,7 @@
 #include "value.h"
 #include <boost/thread/recursive_mutex.hpp>
 #include <map>
+#include <stdint.h>
 #include <boost/thread.hpp>
 #include <pthread.h>
 #include <set>
@@ -133,6 +134,7 @@ class MessageRouter {
     void addRoute(int route_id, zmq::socket_t *dest);
     void addDefaultRoute(zmq::socket_t *def);
     void setRemoteSocket(zmq::socket_t *remote_sock);
+    void setDropRemoteOnFull(bool drop);
 
     void removeRoute(int route_id);
 
@@ -209,6 +211,19 @@ class SubscriptionManager : public ConnectionManager {
 
     // Drop subscriber session state so the next successful CHANNEL grant reconnects.
     void invalidateSubscriberSession();
+
+    // Full client reconnect after peer (iod) restart / ENOTSOCK / stranded REQ:
+    // invalidate SUB session, recreate setup REQ, reset to e_startup so the
+    // next checkConnections() runs setupConnections() + CHANNEL from scratch.
+    // Rate-limited (same interval as setup REQ recreate). Returns true if a
+    // reconnect was started this call.
+    bool forceFullReconnect(const char *reason = nullptr);
+
+    // CHANNEL replies that never arrived. Reset by a successful grant and by
+    // noteSubscriberData(). The sampler uses this to exit; other clients keep
+    // reconnecting inside the same process.
+    uint32_t channelRequestTimeouts() const;
+    void noteSubscriberData();
 
     void configureSetupConnection(const char *host, int port);
     // Register setup-socket monitor callbacks without exposing monit_setup layout.

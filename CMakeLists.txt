@@ -37,8 +37,19 @@ if (EXISTS "/opt/local/include")
 endif()
 include_directories("${PROJECT_SOURCE_DIR}/")
 include_directories("${PROJECT_BINARY_DIR}")
-include_directories("${ClockworkClient_INCLUDE_DIR}")
-include_directories("${Boost_INCLUDE_DIR}")
+if(ClockworkClient_INCLUDE_DIR)
+    include_directories("${ClockworkClient_INCLUDE_DIR}")
+endif()
+# A system Boost under /usr/include can leave Boost_INCLUDE_DIR empty while
+# FindBoost still reports the libraries found. CMake treats a quoted empty
+# string as an include directory and aborts ("given empty-string as include
+# directory"). Clockwork's list is unquoted, which is why that build passed.
+if(NOT Boost_INCLUDE_DIR AND Boost_INCLUDE_DIRS)
+    list(GET Boost_INCLUDE_DIRS 0 Boost_INCLUDE_DIR)
+endif()
+if(Boost_INCLUDE_DIR)
+    include_directories("${Boost_INCLUDE_DIR}")
+endif()
 
 if (EXISTS "/usr/local/lib")
     link_directories("/usr/local/lib")
